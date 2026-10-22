@@ -41,10 +41,12 @@ interface Opts {
   auth?: boolean | undefined;
 }
 
-let refreshing: Promise<boolean> | null = null;
-async function refresh(): Promise<boolean> {
+// Single-flight: refresh tokens rotate on every use, so concurrent callers (app bootstrap,
+// parallel 401s, React StrictMode double effects) must share one request or the API sees reuse.
+let refreshing: Promise<AuthResponse | null> | null = null;
+export function refreshSession(): Promise<AuthResponse | null> {
   const rt = tokenStore.getRefresh();
-  if (!rt) return false;
+  if (!rt) return Promise.resolve(null);
   refreshing ??= (async () => {
     try {
       const res = await fetch(`${API_URL}/auth/refresh`, {
@@ -52,18 +54,19 @@ async function refresh(): Promise<boolean> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken: rt }),
       });
-      if (!res.ok) return false;
+      if (!res.ok) return null;
       const data = (await res.json()) as AuthResponse;
       tokenStore.set(data.accessToken, data.refreshToken);
-      return true;
+      return data;
     } catch {
-      return false;
+      return null;
     } finally {
       setTimeout(() => (refreshing = null), 0);
     }
   })();
   return refreshing;
 }
+const refresh = async () => (await refreshSession()) !== null;
 
 function buildUrl(path: string, query?: Query) {
   const url = new URL(`${API_URL}${path}`);
@@ -73,7 +76,12 @@ function buildUrl(path: string, query?: Query) {
   return url.toString();
 }
 
-async function request<T>(method: string, path: string, opts: Opts = {}, retried = false): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  opts: Opts = {},
+  retried = false,
+): Promise<T> {
   if (env.demoMode) {
     const { demoRequest } = await import("./demo");
     return demoRequest<T>(method, path, opts.query, opts.body);
@@ -105,20 +113,23 @@ async function request<T>(method: string, path: string, opts: Opts = {}, retried
     } catch {
       /* sin cuerpo */
     }
-    const msg = Array.isArray(body?.message) ? body.message.join(", ") : (body?.message ?? res.statusText);
+    const msg = Array.isArray(body?.message)
+      ? body.message.join(", ")
+      : (body?.message ?? res.statusText);
     throw new ApiError(res.status, msg || `Error ${res.status}`, body);
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export const api = {
   get: <T>(path: string, query?: Query, auth = true) => request<T>("GET", path, { query, auth }),
-  post: <T>(path: string, body?: unknown, auth = true) => request<T>("POST", path, { body: body ?? {}, auth }),
+  post: <T>(path: string, body?: unknown, auth = true) =>
+    request<T>("POST", path, { body: body ?? {}, auth }),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, { body }),
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, { body }),
-  delete: <T>(path: string) => request<T>("DELETE", path),
+  delete: <T>(path: string, body?: unknown) => request<T>("DELETE", path, { body }),
   upload: <T>(path: string, form: FormData) => request<T>("POST", path, { form }),
 };
 

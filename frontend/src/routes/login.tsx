@@ -13,10 +13,14 @@ import { InlineSpinner } from "@/components/common/state-view";
 import { errorMessage } from "@/lib/api/client";
 import { seo } from "@/lib/seo";
 
-const schema = z.object({ email: z.string().email("Correo inválido"), password: z.string().min(1, "Requerido") });
+const schema = z.object({
+  email: z.string().email("Correo inválido"),
+  password: z.string().min(1, "Requerido"),
+});
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (s: Record<string, unknown>): { redirect?: string } => (typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {}),
+  validateSearch: (s: Record<string, unknown>): { redirect?: string } =>
+    typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {},
   head: () => seo("Iniciar sesión"),
   component: Login,
 });
@@ -38,19 +42,49 @@ function Login() {
   });
   const err = form.formState.errors;
   return (
-    <AuthCard title="Iniciar sesión" subtitle="Accede a tus vehículos y estacionamientos."
-      footer={<>¿No tienes cuenta? <Link to="/register" className="font-medium text-primary">Regístrate</Link></>}>
-      {status === "expired" && <Alert className="mb-4"><AlertDescription>Tu sesión expiró. Vuelve a iniciar sesión.</AlertDescription></Alert>}
+    <AuthCard
+      title="Iniciar sesión"
+      subtitle="Accede a tus vehículos y estacionamientos."
+      footer={
+        <>
+          ¿No tienes cuenta?{" "}
+          <Link to="/register" className="font-medium text-primary">
+            Regístrate
+          </Link>
+        </>
+      }
+    >
+      {status === "expired" && (
+        <Alert className="mb-4">
+          <AlertDescription>Tu sesión expiró. Vuelve a iniciar sesión.</AlertDescription>
+        </Alert>
+      )}
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="email">Correo</Label>
-          <Input id="email" type="email" autoComplete="email" aria-invalid={!!err.email} {...form.register("email")} />
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            aria-invalid={!!err.email}
+            {...form.register("email")}
+          />
           {err.email && <p className="text-xs text-destructive">{err.email.message}</p>}
         </div>
         <div className="space-y-1.5">
-          <div className="flex justify-between"><Label htmlFor="password">Contraseña</Label>
-            <Link to="/forgot-password" className="text-xs text-primary">¿La olvidaste?</Link></div>
-          <Input id="password" type="password" autoComplete="current-password" aria-invalid={!!err.password} {...form.register("password")} />
+          <div className="flex justify-between">
+            <Label htmlFor="password">Contraseña</Label>
+            <Link to="/forgot-password" className="text-xs text-primary">
+              ¿La olvidaste?
+            </Link>
+          </div>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            aria-invalid={!!err.password}
+            {...form.register("password")}
+          />
           {err.password && <p className="text-xs text-destructive">{err.password.message}</p>}
         </div>
         <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>

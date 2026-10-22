@@ -23,14 +23,18 @@ export function formatDate(iso: string | null | undefined, p: Preferences, withT
 }
 
 export function formatMoney(amount: number, currency: string, locale: string) {
-  return new Intl.NumberFormat(locale === "es" ? "es-GT" : "en-US", { style: "currency", currency }).format(amount);
+  return new Intl.NumberFormat(locale === "es" ? "es-GT" : "en-US", {
+    style: "currency",
+    currency,
+  }).format(amount);
 }
 
 export function useFormat() {
   const { prefs } = usePreferences();
   return {
     date: (iso?: string | null, withTime = true) => formatDate(iso, prefs, withTime),
-    money: (n: number, currency?: string) => formatMoney(n, currency ?? prefs.currency, prefs.locale),
+    money: (n: number, currency?: string) =>
+      formatMoney(n, currency ?? prefs.currency, prefs.locale),
     meters: (m?: number | null) =>
       m == null ? "—" : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`,
   };
@@ -49,11 +53,14 @@ export function haversineMeters(a: { lat: number; lng: number }, b: { lat: numbe
   const toRad = (x: number) => (x * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
 export const externalNav = {
-  google: (lat: number, lng: number) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+  google: (lat: number, lng: number) =>
+    `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
   waze: (lat: number, lng: number) => `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`,
 };

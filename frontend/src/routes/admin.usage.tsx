@@ -5,7 +5,10 @@ import { PageHeader, Section } from "@/components/common/page-header";
 import { QueryView } from "@/components/common/query-view";
 import { seo } from "@/lib/seo";
 
-export const Route = createFileRoute("/admin/usage")({ head: () => seo("Uso de la plataforma"), component: Usage });
+export const Route = createFileRoute("/admin/usage")({
+  head: () => seo("Uso de la plataforma"),
+  component: Usage,
+});
 
 function Usage() {
   const q = useAdminUsage();
@@ -15,7 +18,14 @@ function Usage() {
       <QueryView query={q} isEmpty={(d) => d.series.length === 0}>
         {(d) => (
           <Section title="Usuarios y sesiones">
-            <TrendChart data={d.series} x="date" series={[{ key: "users", label: "Usuarios", color: "var(--chart-1)" }, { key: "sessions", label: "Sesiones", color: "var(--chart-2)" }]} />
+            <TrendChart
+              data={d.series}
+              x="date"
+              series={[
+                { key: "users", label: "Usuarios", color: "var(--chart-1)" },
+                { key: "sessions", label: "Sesiones", color: "var(--chart-2)" },
+              ]}
+            />
           </Section>
         )}
       </QueryView>

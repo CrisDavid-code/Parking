@@ -1,0 +1,27 @@
+# Entorno local / staging. En producción usa secretos reales (no estos valores de ejemplo).
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: veyro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-veyro-local-only}
+      POSTGRES_DB: veyro
+    volumes: [dbdata:/var/lib/postgresql/data]
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U veyro -d veyro"]
+      interval: 5s
+      retries: 20
+
+  api:
+    build: ./backend
+    env_file: [./backend/.env]
+    environment:
+      DATABASE_URL: postgresql://veyro:${POSTGRES_PASSWORD:-veyro-local-only}@db:5432/veyro?schema=public
+      PORT: "3000"
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["3000:3000"]
+
+volumes:
+  dbdata:

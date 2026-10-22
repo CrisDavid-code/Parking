@@ -18,7 +18,9 @@ export function useLastLocation(vehicleId?: string | null) {
     if (!vehicleId || env.demoMode || typeof WebSocket === "undefined") return;
     let ws: WebSocket;
     try {
-      ws = new WebSocket(`${env.wsUrl}/tracking?vehicleId=${vehicleId}&token=${tokenStore.getAccess() ?? ""}`);
+      ws = new WebSocket(
+        `${env.wsUrl}/tracking?vehicleId=${vehicleId}&token=${tokenStore.getAccess() ?? ""}`,
+      );
     } catch {
       return;
     }
@@ -29,7 +31,8 @@ export function useLastLocation(vehicleId?: string | null) {
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(String(ev.data)) as { event?: string; data?: LastLocation };
-        if (msg.event === "location" && msg.data?.vehicleId === vehicleId) qc.setQueryData(["tracking", "last", vehicleId], msg.data);
+        if (msg.event === "location" && msg.data?.vehicleId === vehicleId)
+          qc.setQueryData(["tracking", "last", vehicleId], msg.data);
       } catch {
         /* mensaje inválido */
       }

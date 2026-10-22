@@ -10,9 +10,17 @@ export const Route = createFileRoute("/pricing")({
     <PublicLayout>
       <div className="mx-auto max-w-6xl px-4 py-16">
         <h1 className="text-4xl font-bold">Precios</h1>
-        <p className="mt-2 text-muted-foreground">Precios y límites obtenidos directamente de nuestro servicio.</p>
+        <p className="mt-2 text-muted-foreground">
+          Precios y límites obtenidos directamente de nuestro servicio.
+        </p>
         <div className="mt-10">
-          <PricingGrid action={() => <Button asChild className="w-full"><Link to="/register">Elegir</Link></Button>} />
+          <PricingGrid
+            action={() => (
+              <Button asChild className="w-full">
+                <Link to="/register">Elegir</Link>
+              </Button>
+            )}
+          />
         </div>
       </div>
     </PublicLayout>

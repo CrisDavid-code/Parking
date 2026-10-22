@@ -8,7 +8,10 @@ import type { MapViewProps } from "./types";
 
 const LeafletMap = lazy(() => import("./leaflet-map"));
 
-class MapBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+class MapBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { failed: boolean }
+> {
   override state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
@@ -27,12 +30,15 @@ function MapFallbackList(props: MapViewProps) {
           <li key={m.id} className="flex items-center justify-between gap-2 py-2">
             <span>{m.label}</span>
             <span className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-              {m.lat.toFixed(5)}, {m.lng.toFixed(5)} {m.status !== "user" && <FreshnessBadge value={m.status} />}
+              {m.lat.toFixed(5)}, {m.lng.toFixed(5)}{" "}
+              {m.status !== "user" && <FreshnessBadge value={m.status} />}
             </span>
           </li>
         ))}
         {props.circles?.map((c) => (
-          <li key={c.id} className="py-2">{c.label} · radio {c.radiusMeters} m</li>
+          <li key={c.id} className="py-2">
+            {c.label} · radio {c.radiusMeters} m
+          </li>
         ))}
       </ul>
     </div>

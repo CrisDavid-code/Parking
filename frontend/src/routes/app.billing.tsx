@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { useFormat } from "@/lib/format";
 import { seo } from "@/lib/seo";
 
-export const Route = createFileRoute("/app/billing")({ head: () => seo("Facturación"), component: Billing });
+export const Route = createFileRoute("/app/billing")({
+  head: () => seo("Facturación"),
+  component: Billing,
+});
 
 function Billing() {
   const sub = useMySubscription();
@@ -24,15 +27,25 @@ function Billing() {
               <Section title="Resumen">
                 <dl className="grid grid-cols-2 gap-4 text-sm">
                   <Field label="Plan" value={plan?.name ?? s.planCode} />
-                  <Field label="Importe mensual" value={plan ? f.money(plan.priceMonthly, plan.currency) : null} />
+                  <Field
+                    label="Importe mensual"
+                    value={plan ? f.money(plan.priceMonthly, plan.currency) : null}
+                  />
                   <Field label="Estado" value={s.status} />
                   <Field label="Próximo período" value={f.date(s.currentPeriodEnd, false)} />
                 </dl>
-                <Button asChild variant="outline" size="sm" className="mt-4"><Link to="/app/subscription">Cambiar plan</Link></Button>
+                <Button asChild variant="outline" size="sm" className="mt-4">
+                  <Link to="/app/subscription">Cambiar plan</Link>
+                </Button>
               </Section>
               <Section title="Método de pago y facturas">
                 {s.paymentsConfigured ? (
-                  <StateView kind="empty" compact title="Sin facturas" description="Las facturas emitidas por el proveedor de pagos aparecerán aquí." />
+                  <StateView
+                    kind="empty"
+                    compact
+                    title="Sin facturas"
+                    description="Las facturas emitidas por el proveedor de pagos aparecerán aquí."
+                  />
                 ) : (
                   <StateView kind="payments-not-configured" compact />
                 )}

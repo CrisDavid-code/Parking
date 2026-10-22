@@ -126,7 +126,9 @@ export interface Share {
 }
 export interface ShareInvitation {
   token: string;
-  vehicle: Pick<Vehicle, "id" | "alias" | "make" | "model">;
+  type?: "vehicle_share" | "org_member";
+  vehicle: Pick<Vehicle, "id" | "alias" | "make" | "model"> | null;
+  organization?: { id: string; name: string } | null;
   ownerName: string;
   permissions: SharePermission[];
   expiresAt?: string | null;
@@ -209,7 +211,13 @@ export interface OrgAlert {
   acknowledged?: boolean;
 }
 export interface ReportSummary {
-  totals: { vehicles: number; activeVehicles: number; drivers: number; devices: number; alerts: number };
+  totals: {
+    vehicles: number;
+    activeVehicles: number;
+    drivers: number;
+    devices: number;
+    alerts: number;
+  };
   series: { date: string; distanceKm: number; parkingSessions: number; alerts: number }[];
 }
 
@@ -227,14 +235,7 @@ export interface Level {
   ordinal: number;
 }
 export type NodeType =
-  | "corridor"
-  | "elevator"
-  | "stairs"
-  | "ramp"
-  | "entrance"
-  | "exit"
-  | "parking_spot"
-  | "landmark";
+  "corridor" | "elevator" | "stairs" | "ramp" | "entrance" | "exit" | "parking_spot" | "landmark";
 export interface IndoorNode {
   id: string;
   levelId: string;

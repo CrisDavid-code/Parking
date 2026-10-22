@@ -1,6 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  Bell, Car, Cpu, CreditCard, History, Home, LifeBuoy, Map, MapPin, Navigation, Radar, Receipt, Settings, Share2, Shield, Building2, ShieldCheck,
+  Bell,
+  Car,
+  Cpu,
+  CreditCard,
+  History,
+  Home,
+  LifeBuoy,
+  Map,
+  MapPin,
+  Navigation,
+  Radar,
+  Receipt,
+  Settings,
+  Share2,
+  Shield,
+  Building2,
+  ShieldCheck,
 } from "lucide-react";
 import { AppShell, type NavItem } from "@/components/layout/app-shell";
 import { useAuth } from "@/modules/auth/auth-context";
@@ -35,12 +51,24 @@ function AppLayout() {
   const switcher = (hasRole("ORG_ADMIN", "ORG_MEMBER") || hasRole("PLATFORM_ADMIN")) && (
     <div className="space-y-1 border-t border-sidebar-border pt-3 text-sm">
       {hasRole("ORG_ADMIN", "ORG_MEMBER") && (
-        <Link to="/business" className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sidebar-foreground hover:bg-sidebar-accent"><Building2 className="size-4" /> Empresa</Link>
+        <Link
+          to="/business"
+          className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sidebar-foreground hover:bg-sidebar-accent"
+        >
+          <Building2 className="size-4" /> Empresa
+        </Link>
       )}
       {hasRole("PLATFORM_ADMIN") && (
-        <Link to="/admin" className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sidebar-foreground hover:bg-sidebar-accent"><ShieldCheck className="size-4" /> Administración</Link>
+        <Link
+          to="/admin"
+          className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sidebar-foreground hover:bg-sidebar-accent"
+        >
+          <ShieldCheck className="size-4" /> Administración
+        </Link>
       )}
     </div>
   );
-  return <AppShell nav={nav} mobileNav={mobile} areaLabel="Mi cuenta" switcher={switcher || undefined} />;
+  return (
+    <AppShell nav={nav} mobileNav={mobile} areaLabel="Mi cuenta" switcher={switcher || undefined} />
+  );
 }

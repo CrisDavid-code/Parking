@@ -1,6 +1,15 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, onSessionExpired, tokenStore } from "@/lib/api/client";
+import { api, onSessionExpired, refreshSession, tokenStore } from "@/lib/api/client";
+import { env } from "@/config/env";
 import type { AuthResponse, Role, User } from "@/types/api";
 
 type Status = "loading" | "authenticated" | "anonymous" | "expired";
@@ -8,7 +17,12 @@ interface AuthCtx {
   status: Status;
   user: User | null;
   login: (email: string, password: string) => Promise<User>;
-  register: (d: { email: string; password: string; fullName: string; accountType: "personal" | "business" }) => Promise<User>;
+  register: (d: {
+    email: string;
+    password: string;
+    fullName: string;
+    accountType: "personal" | "business";
+  }) => Promise<User>;
   logout: () => Promise<void>;
   setUser: (u: User) => void;
   hasRole: (...roles: Role[]) => boolean;
@@ -33,16 +47,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus("expired");
       qc.clear();
     });
-    const rt = tokenStore.getRefresh();
-    if (!rt) setStatus("anonymous");
-    else
-      api
-        .post<AuthResponse>("/auth/refresh", { refreshToken: rt }, false)
-        .then(accept)
-        .catch(() => {
+    if (env.demoMode) {
+      if (tokenStore.getRefresh())
+        api
+          .post<AuthResponse>("/auth/refresh", {}, false)
+          .then(accept)
+          .catch(() => setStatus("anonymous"));
+      else setStatus("anonymous");
+    } else
+      refreshSession().then((r) => {
+        if (r) accept(r);
+        else {
           tokenStore.clear();
           setStatus("anonymous");
-        });
+        }
+      });
     return () => {
       off();
     };
@@ -53,7 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       user,
       setUser,
-      login: async (email, password) => accept(await api.post<AuthResponse>("/auth/login", { email, password }, false)),
+      login: async (email, password) =>
+        accept(await api.post<AuthResponse>("/auth/login", { email, password }, false)),
       register: async (d) => accept(await api.post<AuthResponse>("/auth/register", d, false)),
       logout: async () => {
         const rt = tokenStore.getRefresh();

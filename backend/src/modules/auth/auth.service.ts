@@ -11,6 +11,7 @@ import { LoginDto, RegisterDto } from './auth.dto';
 
 const MAX_FAILED = 5;
 const LOCK_MS = 15 * 60_000;
+const REUSE_GRACE_MS = 30_000;
 
 interface Ctx { ip?: string; userAgent?: string }
 
@@ -69,6 +70,8 @@ export class AuthService {
     const s = await this.prisma.authSession.findUnique({ where: { refreshTokenHash: sha256(token) } });
     if (!s) throw new UnauthorizedException('Invalid refresh token');
     if (s.revokedAt) {
+      // Grace window: a token rotated seconds ago is most likely a concurrent legit refresh (multi-tab).
+      if (Date.now() - s.revokedAt.getTime() < REUSE_GRACE_MS) throw new UnauthorizedException('Refresh token already rotated');
       await this.prisma.authSession.updateMany({ where: { userId: s.userId, revokedAt: null }, data: { revokedAt: new Date() } });
       await this.audit.log({ actorUserId: s.userId, action: 'auth.refresh_reuse_detected', resourceType: 'auth_session', resourceId: s.id, ip: ctx.ip });
       throw new UnauthorizedException('Refresh token reuse detected; all sessions revoked');

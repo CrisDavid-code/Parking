@@ -25,12 +25,18 @@ export function GlobalBanners() {
   return (
     <>
       {env.demoMode && (
-        <div role="status" className="flex items-center justify-center gap-2 bg-warning px-3 py-1.5 text-xs font-semibold text-warning-foreground">
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 bg-warning px-3 py-1.5 text-xs font-semibold text-warning-foreground"
+        >
           <FlaskConical className="size-3.5" aria-hidden /> {t("demo.banner")}
         </div>
       )}
       {!online && (
-        <div role="alert" className="flex items-center justify-center gap-2 bg-night px-3 py-1.5 text-xs text-night-foreground">
+        <div
+          role="alert"
+          className="flex items-center justify-center gap-2 bg-night px-3 py-1.5 text-xs text-night-foreground"
+        >
           <WifiOff className="size-3.5" aria-hidden /> {t("offline.banner")}
         </div>
       )}

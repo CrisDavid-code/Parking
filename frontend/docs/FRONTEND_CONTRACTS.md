@@ -38,7 +38,7 @@ auth, dashboard, vehicles, parking, maps, indoor-navigation, sensors, tracking, 
 - Soporte: `POST /support/tickets`*
 - Admin: `GET /admin/{users,organizations,plans,usage,audit,support,health}`, `PATCH /admin/users/:id`*, `PATCH /admin/plans/:code`*, `PATCH /admin/support/:id`*
 
-`*` = endpoint asumido por el frontend, no incluido explícitamente en la especificación original; confirmar con backend.
+`*` = endpoint que el frontend asumió y que el backend (`backend/`) ya implementa. El contrato completo y vigente está en `docs/openapi.json` (generado con `npm run openapi` en `backend/`) y en Swagger (`/api/docs`). Ver `docs/INTEGRATION.md`.
 
 ## Sensores
 `SensorProvider` (`src/modules/sensors/provider.ts`); en web se usa `UnsupportedSensorProvider` → "Requiere la app móvil nativa". No se simulan sensores ni cámara AR.

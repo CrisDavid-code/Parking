@@ -45,7 +45,11 @@ describe('Auth & security (e2e)', () => {
     const u = await register(app);
     const r1 = await api(app).post('/auth/refresh').send({ refreshToken: u.refreshToken }).expect(200);
     expect(r1.body.refreshToken).not.toBe(u.refreshToken);
-    // reuse of the old (rotated) token => everything revoked
+    // concurrent reuse inside the grace window is refused but doesn't nuke the new session
+    await api(app).post('/auth/refresh').send({ refreshToken: u.refreshToken }).expect(401);
+    expect(await prisma.authSession.count({ where: { userId: u.id, revokedAt: null } })).toBe(1);
+    // reuse of an old rotated token => everything revoked
+    await prisma.authSession.updateMany({ where: { userId: u.id, revokedAt: { not: null } }, data: { revokedAt: new Date(Date.now() - 60_000) } });
     await api(app).post('/auth/refresh').send({ refreshToken: u.refreshToken }).expect(401);
     await api(app).post('/auth/refresh').send({ refreshToken: r1.body.refreshToken }).expect(401);
   });

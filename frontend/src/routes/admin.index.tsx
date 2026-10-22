@@ -8,7 +8,10 @@ import { StatusBadge } from "@/components/common/badges";
 import { useFormat } from "@/lib/format";
 import { seo } from "@/lib/seo";
 
-export const Route = createFileRoute("/admin/")({ head: () => seo("Panel de administración"), component: AdminHome });
+export const Route = createFileRoute("/admin/")({
+  head: () => seo("Panel de administración"),
+  component: AdminHome,
+});
 
 function AdminHome() {
   const usage = useAdminUsage();
@@ -28,14 +31,29 @@ function AdminHome() {
             </div>
           )}
         </QueryView>
-        <Section title="Estado de servicios" actions={health.data && <span className="text-xs text-muted-foreground">Verificado {f.date(health.data.checkedAt)}</span>}>
+        <Section
+          title="Estado de servicios"
+          actions={
+            health.data && (
+              <span className="text-xs text-muted-foreground">
+                Verificado {f.date(health.data.checkedAt)}
+              </span>
+            )
+          }
+        >
           <QueryView query={health} isEmpty={(h) => h.services.length === 0}>
             {(h) => (
               <ul className="grid gap-2 sm:grid-cols-3">
                 {h.services.map((s) => (
-                  <li key={s.name} className="flex items-center justify-between rounded-lg border border-border p-3 text-sm">
+                  <li
+                    key={s.name}
+                    className="flex items-center justify-between rounded-lg border border-border p-3 text-sm"
+                  >
                     <span className="font-medium">{s.name}</span>
-                    <span className="flex items-center gap-2 text-xs text-muted-foreground">{s.latencyMs != null && `${s.latencyMs} ms`}<StatusBadge value={s.status} /></span>
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {s.latencyMs != null && `${s.latencyMs} ms`}
+                      <StatusBadge value={s.status} />
+                    </span>
                   </li>
                 ))}
               </ul>

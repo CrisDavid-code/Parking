@@ -1,6 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  Outlet, Link, createRootRouteWithContext, useRouter, HeadContent, Scripts, type ErrorComponentProps,
+  Outlet,
+  Link,
+  createRootRouteWithContext,
+  useRouter,
+  HeadContent,
+  Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
@@ -19,7 +25,9 @@ function NotFoundComponent() {
         <p className="font-display text-8xl font-bold text-gradient">404</p>
         <h1 className="mt-4 text-xl font-semibold">Página no encontrada</h1>
         <p className="mt-2 text-sm opacity-75">La página que buscas no existe o fue movida.</p>
-        <Button asChild className="mt-6"><Link to="/">Volver al inicio</Link></Button>
+        <Button asChild className="mt-6">
+          <Link to="/">Volver al inicio</Link>
+        </Button>
       </div>
     </div>
   );
@@ -36,8 +44,17 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
         <h1 className="text-xl font-semibold">No se pudo cargar la página</h1>
         <p className="mt-2 text-sm text-muted-foreground">Ocurrió un error inesperado.</p>
         <div className="mt-6 flex justify-center gap-2">
-          <Button onClick={() => { router.invalidate(); reset(); }}>Reintentar</Button>
-          <Button asChild variant="outline"><a href="/">Inicio</a></Button>
+          <Button
+            onClick={() => {
+              router.invalidate();
+              reset();
+            }}
+          >
+            Reintentar
+          </Button>
+          <Button asChild variant="outline">
+            <a href="/">Inicio</a>
+          </Button>
         </div>
       </div>
     </div>
@@ -56,7 +73,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap",
+      },
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
     ],
@@ -74,7 +94,12 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-card focus:p-2">Saltar al contenido</a>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-card focus:p-2"
+        >
+          Saltar al contenido
+        </a>
         {children}
         <Scripts />
       </body>

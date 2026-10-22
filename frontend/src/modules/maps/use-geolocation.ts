@@ -22,7 +22,12 @@ export function useGeolocation() {
         setState("requesting");
         navigator.geolocation.getCurrentPosition(
           (p) => {
-            const f = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, at: p.timestamp };
+            const f = {
+              lat: p.coords.latitude,
+              lng: p.coords.longitude,
+              accuracy: p.coords.accuracy,
+              at: p.timestamp,
+            };
             setFix(f);
             setState("ok");
             resolve(f);

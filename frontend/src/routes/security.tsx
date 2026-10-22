@@ -8,10 +8,26 @@ export const Route = createFileRoute("/security")({
   component: Security,
 });
 const points = [
-  { icon: MapPin, t: "Ubicación bajo demanda", d: "Solo pedimos permiso de ubicación cuando tocas “Usar mi ubicación”." },
-  { icon: Lock, t: "Conexiones cifradas", d: "Toda la comunicación con el servicio viaja por HTTPS." },
-  { icon: KeyRound, t: "Tokens de dispositivo de un solo uso", d: "El token de un dispositivo se muestra una única vez y puede revocarse." },
-  { icon: Download, t: "Control de tus datos", d: "Exporta o elimina tu información desde Privacidad." },
+  {
+    icon: MapPin,
+    t: "Ubicación bajo demanda",
+    d: "Solo pedimos permiso de ubicación cuando tocas “Usar mi ubicación”.",
+  },
+  {
+    icon: Lock,
+    t: "Conexiones cifradas",
+    d: "Toda la comunicación con el servicio viaja por HTTPS.",
+  },
+  {
+    icon: KeyRound,
+    t: "Tokens de dispositivo de un solo uso",
+    d: "El token de un dispositivo se muestra una única vez y puede revocarse.",
+  },
+  {
+    icon: Download,
+    t: "Control de tus datos",
+    d: "Exporta o elimina tu información desde Privacidad.",
+  },
 ];
 function Security() {
   return (

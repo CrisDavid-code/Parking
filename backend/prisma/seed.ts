@@ -46,13 +46,13 @@ async function main() {
     const L = Object.fromEntries(b.levels.map((l) => [l.code, l.id]));
     const v = await prisma.indoorMapVersion.create({ data: { buildingId: b.id, version: 1, status: 'published', publishedAt: new Date(), notes: 'Mapa de prueba' } });
     const nodes = [
-      ['L3_FOOD', 'L3', 0, 0, 'landmark', 'Plaza de comidas'],
-      ['L3_E1', 'L3', 20, 0, 'elevator', 'Ascensor norte'],
-      ['L3_S1', 'L3', 0, 30, 'stairs', 'Escalera este'],
-      ['B2_E1', 'B2', 20, 0, 'elevator', 'Ascensor norte'],
-      ['B2_S1', 'B2', 0, 30, 'stairs', 'Escalera este'],
-      ['B2_ROWC', 'B2', 20, 40, 'corridor', 'Fila C'],
-      ['B2_P148', 'B2', 25, 40, 'parking_spot', 'Plaza 148'],
+      ['L3_FOOD', 'L3', 20, 20, 'landmark', 'Plaza de comidas'],
+      ['L3_E1', 'L3', 40, 20, 'elevator', 'Ascensor norte'],
+      ['L3_S1', 'L3', 20, 50, 'stairs', 'Escalera este'],
+      ['B2_E1', 'B2', 40, 20, 'elevator', 'Ascensor norte'],
+      ['B2_S1', 'B2', 20, 50, 'stairs', 'Escalera este'],
+      ['B2_ROWC', 'B2', 40, 60, 'corridor', 'Fila C'],
+      ['B2_P148', 'B2', 45, 60, 'parking_spot', 'Plaza 148'],
     ] as const;
     for (const [key, lvl, x, y, type, label] of nodes) await prisma.navigationNode.create({ data: { mapVersionId: v.id, levelId: L[lvl], key, x, y, type, label } });
     const id = Object.fromEntries((await prisma.navigationNode.findMany({ where: { mapVersionId: v.id } })).map((n) => [n.key, n.id]));

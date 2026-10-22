@@ -12,7 +12,10 @@ import { api, errorMessage } from "@/lib/api/client";
 import { seo } from "@/lib/seo";
 
 const schema = z.object({ email: z.string().email("Correo inválido") });
-export const Route = createFileRoute("/forgot-password")({ head: () => seo("Recuperar contraseña"), component: Forgot });
+export const Route = createFileRoute("/forgot-password")({
+  head: () => seo("Recuperar contraseña"),
+  component: Forgot,
+});
 
 function Forgot() {
   const [sent, setSent] = useState(false);
@@ -26,17 +29,35 @@ function Forgot() {
     }
   });
   return (
-    <AuthCard title="Recuperar contraseña" footer={<Link to="/login" className="text-primary">Volver a iniciar sesión</Link>}>
+    <AuthCard
+      title="Recuperar contraseña"
+      footer={
+        <Link to="/login" className="text-primary">
+          Volver a iniciar sesión
+        </Link>
+      }
+    >
       {sent ? (
-        <p role="status" className="surface-card p-4 text-sm">Si el correo existe, recibirás un enlace para restablecer tu contraseña.</p>
+        <p role="status" className="surface-card p-4 text-sm">
+          Si el correo existe, recibirás un enlace para restablecer tu contraseña.
+        </p>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="space-y-1.5">
             <Label htmlFor="email">Correo</Label>
-            <Input id="email" type="email" {...form.register("email")} aria-invalid={!!form.formState.errors.email} />
-            {form.formState.errors.email && <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>}
+            <Input
+              id="email"
+              type="email"
+              {...form.register("email")}
+              aria-invalid={!!form.formState.errors.email}
+            />
+            {form.formState.errors.email && (
+              <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
+            )}
           </div>
-          <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>Enviar enlace</Button>
+          <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+            Enviar enlace
+          </Button>
         </form>
       )}
     </AuthCard>

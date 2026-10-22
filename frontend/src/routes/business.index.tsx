@@ -8,7 +8,10 @@ import { QueryView } from "@/components/common/query-view";
 import { Kpi } from "@/components/common/kpi";
 import { seo } from "@/lib/seo";
 
-export const Route = createFileRoute("/business/")({ head: () => seo("Panel de empresa"), component: () => <OrgGate>{(p, o) => <Dashboard orgPath={p} name={o.name} />}</OrgGate> });
+export const Route = createFileRoute("/business/")({
+  head: () => seo("Panel de empresa"),
+  component: () => <OrgGate>{(p, o) => <Dashboard orgPath={p} name={o.name} />}</OrgGate>,
+});
 
 function Dashboard({ orgPath, name }: { orgPath: string; name: string }) {
   const to = new Date().toISOString().slice(0, 10);
@@ -28,8 +31,23 @@ function Dashboard({ orgPath, name }: { orgPath: string; name: string }) {
               <Kpi label="Alertas" value={d.totals.alerts} icon={AlertTriangle} />
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              <Section title="Distancia recorrida (km)"><TrendChart data={d.series} x="date" series={[{ key: "distanceKm", label: "km", color: "var(--chart-1)" }]} /></Section>
-              <Section title="Estacionamientos y alertas"><BarsChart data={d.series} x="date" series={[{ key: "parkingSessions", label: "Estacionamientos", color: "var(--chart-2)" }, { key: "alerts", label: "Alertas", color: "var(--chart-3)" }]} /></Section>
+              <Section title="Distancia recorrida (km)">
+                <TrendChart
+                  data={d.series}
+                  x="date"
+                  series={[{ key: "distanceKm", label: "km", color: "var(--chart-1)" }]}
+                />
+              </Section>
+              <Section title="Estacionamientos y alertas">
+                <BarsChart
+                  data={d.series}
+                  x="date"
+                  series={[
+                    { key: "parkingSessions", label: "Estacionamientos", color: "var(--chart-2)" },
+                    { key: "alerts", label: "Alertas", color: "var(--chart-3)" },
+                  ]}
+                />
+              </Section>
             </div>
           </div>
         )}
