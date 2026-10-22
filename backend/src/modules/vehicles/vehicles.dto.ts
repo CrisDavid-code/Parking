@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { ArrayUnique, IsArray, IsEmail, IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
+import { ArrayUnique, IsArray, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUrl, Length, Max, MaxLength, Min } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ALL_PERMISSIONS } from '../../common/access.service';
 
@@ -11,10 +11,11 @@ export class CreateVehicleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) color?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) plate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) maintenanceStatus?: string;
+  @ApiPropertyOptional({ description: 'External https image URL; ignored once a photo is uploaded' }) @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(2000) photoUrl?: string;
 }
 export class UpdateVehicleDto extends PartialType(CreateVehicleDto) {}
 
 export class AddMemberDto {
   @ApiProperty() @Transform(({ value }) => String(value).trim().toLowerCase()) @IsEmail() email: string;
-  @ApiProperty({ enum: ALL_PERMISSIONS, isArray: true }) @IsArray() @ArrayUnique() @IsIn(ALL_PERMISSIONS, { each: true }) permissions: string[];
+  @ApiPropertyOptional({ enum: ALL_PERMISSIONS, isArray: true, description: 'Defaults to family access (view, location, record parking, alerts)' }) @IsOptional() @IsArray() @ArrayUnique() @IsIn(ALL_PERMISSIONS, { each: true }) permissions?: string[];
 }

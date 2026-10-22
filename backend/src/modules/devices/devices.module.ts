@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags, PartialType, PickType } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, Length, MaxLength } from 'class-validator';
-import { TrackingDevice } from '@prisma/client';
+import { IsIn, IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { Prisma, TrackingDevice } from '@prisma/client';
 import { AccessService } from '../../common/access.service';
 import { AuthUser, CurrentUser, PageQuery, paginate, randomToken, sha256 } from '../../common/http';
 import { PrismaService } from '../../common/prisma.service';
@@ -18,7 +18,11 @@ class CreateDeviceDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() organizationId?: string;
 }
 class UpdateDeviceDto extends PartialType(PickType(CreateDeviceDto, ['name', 'vehicleId'] as const)) {}
-class DeviceQuery extends PageQuery { @ApiPropertyOptional() @IsOptional() @IsUUID() organizationId?: string }
+class DeviceQuery extends PageQuery {
+  @ApiPropertyOptional() @IsOptional() @IsUUID() organizationId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() vehicleId?: string;
+  @ApiPropertyOptional({ enum: ['pending', 'active', 'revoked'] }) @IsOptional() @IsIn(['pending', 'active', 'revoked']) status?: 'pending' | 'active' | 'revoked';
+}
 
 @Injectable()
 export class DevicesService {
@@ -41,7 +45,12 @@ export class DevicesService {
 
   async list(userId: string, q: DeviceQuery) {
     if (q.organizationId) await this.access.assertOrgRole(userId, q.organizationId, ['ORG_ADMIN', 'ORG_MEMBER']);
-    const where = q.organizationId ? { organizationId: q.organizationId } : { ownerId: userId, organizationId: null };
+    const where: Prisma.TrackingDeviceWhereInput = {
+      ...(q.organizationId ? { organizationId: q.organizationId } : { ownerId: userId, organizationId: null }),
+      ...(q.vehicleId ? { vehicleId: q.vehicleId } : {}),
+      ...(q.status ? { status: q.status } : {}),
+      ...(q.q ? { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { serial: { contains: q.q, mode: 'insensitive' } }] } : {}),
+    };
     const page = await paginate(q, this.prisma.trackingDevice.count({ where }), (skip, take) =>
       this.prisma.trackingDevice.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
     );
@@ -79,7 +88,7 @@ export class DevicesService {
       data: { ...d, ownerId: userId, credentials: { create: { tokenPrefix: cred.prefix, tokenHash: cred.hash } } },
     });
     await this.audit.log({ actorUserId: userId, organizationId: d.organizationId, action: 'device.create', resourceType: 'device', resourceId: device.id });
-    return { device: this.present(device), deviceToken: cred.token };
+    return { ...this.present(device), deviceToken: cred.token };
   }
 
   async update(userId: string, id: string, d: UpdateDeviceDto) {
@@ -99,7 +108,7 @@ export class DevicesService {
       this.prisma.deviceCredential.create({ data: { deviceId: id, tokenPrefix: cred.prefix, tokenHash: cred.hash } }),
     ]);
     await this.audit.log({ actorUserId: userId, organizationId: dev.organizationId, action: 'device.rotate_token', resourceType: 'device', resourceId: id });
-    return { device: this.present(dev), deviceToken: cred.token };
+    return { ...this.present(dev), deviceToken: cred.token };
   }
 
   async revoke(userId: string, id: string) {

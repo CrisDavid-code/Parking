@@ -79,6 +79,8 @@ export class NavigationService {
   private present(s: PedestrianNavigationSession, availableModes?: NavigationMode[]) {
     return {
       ...s,
+      confirmedNodeId: s.positionConfirmed ? s.currentNodeId : null,
+      createdAt: s.startedAt,
       availableModes: availableModes ?? (s.targetNodeId ? ['basic', 'indoor', 'sensor'] : ['basic']),
       // Sensor/AR mode depends on the client's native capabilities; the server can't vouch for it.
       sensorSupport: 'requires_native_app',
@@ -131,7 +133,14 @@ export class NavigationService {
   }
 
   /** Records a sensor/manual estimate; only strong evidence moves the confirmed position (see assessEstimate). */
-  async position(user: AuthUser, id: string, e: SensorEstimateDto) {
+  async position(user: AuthUser, id: string, input: SensorEstimateDto) {
+    // Manual input (no sensor fields) = the user telling us their level or a known point.
+    const e = {
+      ...input,
+      source: input.source ?? (input.nodeId ? 'landmark' : 'manual_level'),
+      confidence: input.confidence ?? 1,
+      capturedAt: input.capturedAt ?? new Date(),
+    } as const;
     const s = await this.loadSession(user, id);
     if (s.status !== 'active') throw new BadRequestException('Navigation session ended');
     let node: { id: string; levelId: string } | null = null;

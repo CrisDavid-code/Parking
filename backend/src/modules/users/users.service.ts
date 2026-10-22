@@ -11,14 +11,19 @@ export class UsersService {
   async me(userId: string) {
     const u = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      include: { profile: true, orgMembers: { include: { organization: { select: { id: true, name: true, slug: true } } } } },
+      include: { profile: true, orgMembers: { orderBy: { createdAt: 'asc' }, include: { organization: { select: { id: true, name: true, slug: true } } } } },
     });
+    // `roles` merges the platform role with the user's organization roles (deduplicated) for UI gating;
+    // authorization never relies on it — the backend re-checks every request.
+    const roles = [...new Set<string>(['USER', ...(u.role === 'PLATFORM_ADMIN' ? ['PLATFORM_ADMIN'] : []), ...u.orgMembers.map((m) => m.role)])];
     return {
       id: u.id,
       email: u.email,
       fullName: u.fullName,
       role: u.role,
+      roles,
       accountType: u.accountType,
+      organizationId: u.orgMembers[0]?.organizationId ?? null,
       profile: u.profile,
       organizations: u.orgMembers.map((m) => ({ ...m.organization, role: m.role })),
       createdAt: u.createdAt,

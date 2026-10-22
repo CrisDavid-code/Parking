@@ -25,6 +25,7 @@ import { ParkingModule } from './modules/parking/parking.module';
 import { SensorsModule } from './modules/sensors/sensors.module';
 import { SharingModule } from './modules/sharing/sharing.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { SupportModule } from './modules/support/support.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
 import { UsersModule } from './modules/users/users.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
@@ -71,6 +72,7 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
     SensorsModule,
     NavigationModule,
     AdminModule,
+    SupportModule,
     HealthModule,
   ],
   providers: [

@@ -1,7 +1,7 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, Module, NotFoundException, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsIn, IsNumber, IsOptional, IsString, Length, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Length, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { EdgeType, NodeType } from '@prisma/client';
 import { AuthUser, CurrentUser } from '../../common/http';
 import { PrismaService } from '../../common/prisma.service';
@@ -63,6 +63,28 @@ export class MapVersionDto {
   @ApiPropertyOptional({ type: [PlaceIn] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => PlaceIn) places: PlaceIn[] = [];
   @ApiPropertyOptional({ type: [LandmarkIn] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => LandmarkIn) landmarks: LandmarkIn[] = [];
   @ApiPropertyOptional({ type: [EntryIn] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => EntryIn) entryPoints: EntryIn[] = [];
+}
+class EditorNode {
+  @ApiProperty() @IsString() @Length(1, 60) id: string;
+  @ApiProperty() @IsString() levelId: string;
+  @ApiProperty() @IsNumber() @Min(-10_000) @Max(10_000) x: number;
+  @ApiProperty() @IsNumber() @Min(-10_000) @Max(10_000) y: number;
+  @ApiProperty({ enum: NodeType }) @IsEnum(NodeType) type: NodeType;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) label?: string;
+}
+class EditorEdge {
+  @ApiProperty() @IsString() fromNodeId: string;
+  @ApiProperty() @IsString() toNodeId: string;
+  @ApiProperty() @IsNumber() @Min(0) @Max(10_000) distanceMeters: number;
+  @ApiProperty({ enum: EdgeType }) @IsEnum(EdgeType) type: EdgeType;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() accessible?: boolean;
+  @ApiPropertyOptional({ enum: ['open', 'closed'] }) @IsOptional() @IsIn(['open', 'closed']) status?: string;
+}
+/** Whole-map payload from the admin editor (node ids are existing UUIDs or temporary ids). */
+export class EditorMapDto {
+  @ApiProperty({ type: [EditorNode] }) @IsArray() @ArrayMaxSize(20000) @ValidateNested({ each: true }) @Type(() => EditorNode) nodes: EditorNode[];
+  @ApiProperty({ type: [EditorEdge] }) @IsArray() @ArrayMaxSize(50000) @ValidateNested({ each: true }) @Type(() => EditorEdge) edges: EditorEdge[];
+  @ApiProperty({ description: 'Version the editor started from (0 if none); stale saves get 409' }) @IsInt() @Min(0) version: number;
 }
 class EdgeStatusDto { @ApiProperty({ enum: ['open', 'closed'] }) @IsIn(['open', 'closed']) status: 'open' | 'closed' }
 
@@ -163,7 +185,7 @@ export class IndoorMapsService {
     await this.buildings.assertEditor(user, buildingId);
     const levels = await this.prisma.buildingLevel.findMany({ where: { buildingId } });
     const errors = validateMap(d, new Set(levels.map((l) => l.code)));
-    if (errors.length) throw new BadRequestException({ message: 'Invalid indoor map', errors: errors.slice(0, 100) });
+    if (errors.length) throw new BadRequestException({ message: `Invalid indoor map: ${errors.slice(0, 3).join('; ')}`, errors: errors.slice(0, 100) });
     const levelId = new Map(levels.map((l) => [l.code, l.id]));
     const last = await this.prisma.indoorMapVersion.findFirst({ where: { buildingId }, orderBy: { version: 'desc' } });
     const result = await this.prisma.$transaction(async (tx) => {
@@ -211,6 +233,40 @@ export class IndoorMapsService {
     return { buildingId, version, status: 'published' };
   }
 
+  /**
+   * Editor save: converts the whole map to a new version and publishes it.
+   * Existing nodes keep their stable `key` (parking places resolve through it); new nodes use their temp id as key.
+   */
+  async replace(user: AuthUser, buildingId: string, d: EditorMapDto) {
+    await this.buildings.assertEditor(user, buildingId);
+    const current = await this.prisma.indoorMapVersion.findFirst({ where: { buildingId, status: 'published' } });
+    if ((current?.version ?? 0) !== d.version) throw new ConflictException('The map was changed by someone else; reload and try again');
+    const [levels, existing] = await Promise.all([
+      this.prisma.buildingLevel.findMany({ where: { buildingId } }),
+      current ? this.prisma.navigationNode.findMany({ where: { mapVersionId: current.id }, select: { id: true, key: true } }) : [],
+    ]);
+    const levelCode = new Map(levels.map((l) => [l.id, l.code]));
+    const keyOf = new Map(existing.map((n) => [n.id, n.key]));
+    const key = (id: string) => keyOf.get(id) ?? id;
+    const bad = d.nodes.find((n) => !levelCode.has(n.levelId));
+    if (bad) throw new BadRequestException(`Node ${bad.label ?? bad.id} references an unknown level`);
+    const draft: MapVersionDto = {
+      notes: 'Editor',
+      zones: [], places: [], landmarks: [], entryPoints: [],
+      nodes: d.nodes.map((n) => ({ key: key(n.id), levelCode: levelCode.get(n.levelId)!, x: n.x, y: n.y, type: n.type, label: n.label })),
+      edges: d.edges.map((e) => ({ from: key(e.fromNodeId), to: key(e.toNodeId), distanceMeters: e.distanceMeters, type: e.type, accessible: e.accessible, status: e.status })),
+    };
+    // Parking spots become places addressable by their label's number (e.g. "Plaza 148" -> code 148).
+    for (const n of d.nodes.filter((x) => x.type === 'parking_spot')) {
+      const code = n.label?.match(/[A-Za-z0-9-]+$/)?.[0];
+      if (code) draft.places.push({ levelCode: levelCode.get(n.levelId)!, code, nodeKey: key(n.id) });
+    }
+    for (const n of d.nodes.filter((x) => x.type === 'landmark' && x.label)) draft.landmarks.push({ levelCode: levelCode.get(n.levelId)!, name: n.label!, nodeKey: key(n.id) });
+    const v = await this.createVersion(user, buildingId, draft);
+    await this.publish(user, buildingId, v.version);
+    return this.get(user, buildingId);
+  }
+
   /** Operational toggle (e.g. elevator out of service) on any version's edge. */
   async setEdgeStatus(user: AuthUser, edgeId: string, status: 'open' | 'closed') {
     const e = await this.prisma.navigationEdge.findUnique({ where: { id: edgeId }, include: { mapVersion: true } });
@@ -231,6 +287,7 @@ export class IndoorMapsController {
   @Get(':buildingId/versions/:version') getVersion(@CurrentUser() u: AuthUser, @Param('buildingId', ParseUUIDPipe) b: string, @Param('version', ParseIntPipe) v: number) { return this.svc.get(u, b, v); }
   @Post(':buildingId/versions') create(@CurrentUser() u: AuthUser, @Param('buildingId', ParseUUIDPipe) b: string, @Body() d: MapVersionDto) { return this.svc.createVersion(u, b, d); }
   @Post(':buildingId/versions/:version/publish') publish(@CurrentUser() u: AuthUser, @Param('buildingId', ParseUUIDPipe) b: string, @Param('version', ParseIntPipe) v: number) { return this.svc.publish(u, b, v); }
+  @Put(':buildingId') replace(@CurrentUser() u: AuthUser, @Param('buildingId', ParseUUIDPipe) b: string, @Body() d: EditorMapDto) { return this.svc.replace(u, b, d); }
   @Patch('edges/:edgeId') edge(@CurrentUser() u: AuthUser, @Param('edgeId', ParseUUIDPipe) e: string, @Body() d: EdgeStatusDto) { return this.svc.setEdgeStatus(u, e, d.status); }
 }
 

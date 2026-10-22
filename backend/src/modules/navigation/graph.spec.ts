@@ -47,6 +47,8 @@ describe('indoor routing graph', () => {
     expect(text[0]).toBe('Camina 20 m hasta Ascensor norte');
     expect(text[1]).toBe('Toma Ascensor norte y ve al nivel B2');
     expect(text.at(-1)).toContain('Llegaste a la plaza 148 (nivel B2)');
+    // y-down: heading down the screen from the elevator to row C, then +x is a left turn
+    expect(text).toContain('Gira a la izquierda');
     expect(r.alternatives).toHaveLength(1);
     expect(r.alternatives[0].nodeIds).toContain('S_3');
   });

@@ -1,6 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Vehicle, VehicleLastLocation } from '@prisma/client';
-import { AccessService } from '../../common/access.service';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, Vehicle, VehicleLastLocation } from '@prisma/client';
+import { AccessService, ALL_PERMISSIONS, VehiclePermission } from '../../common/access.service';
+
+const DEFAULT_MEMBER_PERMISSIONS: VehiclePermission[] = ['view_parking', 'view_location', 'record_parking', 'alerts'];
 import { freshness } from '../../common/geo';
 import { PageQuery, paginate } from '../../common/http';
 import { PrismaService } from '../../common/prisma.service';
@@ -24,15 +26,20 @@ export class VehiclesService {
   private include = { lastLocation: true, _count: { select: { devices: { where: { status: 'active' as const } } } } };
 
   async present(v: Row) {
-    const { photoKey, deletedAt, lastLocation, _count, ...rest } = v;
+    const { photoKey, photoUrl, deletedAt, lastLocation, _count, ...rest } = v;
     void deletedAt;
     const trackingStatus = !_count.devices ? 'none' : !lastLocation ? 'offline' : freshness(lastLocation.capturedAt) === 'stale' ? 'stale' : 'live';
-    return { ...rest, photoUrl: await this.files.signedUrl(photoKey), trackingStatus };
+    return { ...rest, photoUrl: photoKey ? await this.files.signedUrl(photoKey) : photoUrl, trackingStatus };
   }
 
   async list(userId: string, q: PageQuery, organizationId?: string) {
+    if (organizationId) await this.access.assertOrgRole(userId, organizationId);
     const ids = await this.access.accessibleVehicleIds(userId, 'view_parking');
-    const where = { id: { in: ids }, ...(organizationId ? { organizationId } : {}) };
+    const where: Prisma.VehicleWhereInput = {
+      id: { in: ids },
+      ...(organizationId ? { organizationId } : {}),
+      ...(q.q ? { OR: ['alias', 'make', 'model', 'plate'].map((f) => ({ [f]: { contains: q.q, mode: 'insensitive' } })) } : {}),
+    };
     const page = await paginate(q, this.prisma.vehicle.count({ where }), (skip, take) =>
       this.prisma.vehicle.findMany({ where, skip, take, include: this.include, orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] }),
     );
@@ -60,6 +67,9 @@ export class VehiclesService {
 
   async update(userId: string, id: string, d: UpdateVehicleDto) {
     await this.access.assertVehicle(userId, id, 'manage');
+    const current = await this.prisma.vehicle.findUniqueOrThrow({ where: { id } });
+    // An uploaded photo wins; the client echoing back its signed URL must not overwrite it.
+    if (current.photoKey) delete d.photoUrl;
     return this.present(await this.prisma.vehicle.update({ where: { id }, data: d, include: this.include }));
   }
 
@@ -89,20 +99,26 @@ export class VehiclesService {
 
   async members(userId: string, id: string) {
     await this.access.assertVehicle(userId, id, 'manage');
+    const v = await this.prisma.vehicle.findUniqueOrThrow({ where: { id }, include: { owner: { select: { id: true, email: true, fullName: true } } } });
     const ms = await this.prisma.vehicleMember.findMany({ where: { vehicleId: id }, include: { user: { select: { id: true, email: true, fullName: true } } } });
-    return ms.map((m) => ({ userId: m.userId, email: m.user.email, fullName: m.user.fullName, permissions: m.permissions, createdAt: m.createdAt }));
+    const items = [
+      { id: v.owner.id, userId: v.owner.id, email: v.owner.email, fullName: v.owner.fullName, role: 'owner', permissions: ALL_PERMISSIONS as string[] },
+      ...ms.map((m) => ({ id: m.userId, userId: m.userId, email: m.user.email, fullName: m.user.fullName, role: 'member', permissions: m.permissions })),
+    ];
+    return { items, total: items.length, page: 1, pageSize: items.length };
   }
 
   async addMember(userId: string, id: string, d: AddMemberDto) {
     await this.access.assertVehicle(userId, id, 'manage');
     const target = await this.prisma.user.findFirst({ where: { email: d.email, deletedAt: null } });
     if (!target) throw new NotFoundException('No user with that email; use /shares to invite by email');
+    if (target.id === (await this.prisma.vehicle.findUniqueOrThrow({ where: { id } })).ownerId) throw new BadRequestException('The owner is already a member');
     const owner = await this.prisma.vehicle.findUniqueOrThrow({ where: { id } });
     await this.subs.assertWithinLimit(owner.organizationId ? { organizationId: owner.organizationId } : { userId: owner.ownerId }, 'members', await this.prisma.vehicleMember.count({ where: { vehicleId: id } }) + 1);
     await this.prisma.vehicleMember.upsert({
       where: { vehicleId_userId: { vehicleId: id, userId: target.id } },
-      create: { vehicleId: id, userId: target.id, permissions: d.permissions },
-      update: { permissions: d.permissions },
+      create: { vehicleId: id, userId: target.id, permissions: d.permissions ?? DEFAULT_MEMBER_PERMISSIONS },
+      update: { permissions: d.permissions ?? DEFAULT_MEMBER_PERMISSIONS },
     });
     await this.audit.log({ actorUserId: userId, action: 'vehicle.member_add', resourceType: 'vehicle', resourceId: id, metadata: { memberId: target.id, permissions: d.permissions } });
     return this.members(userId, id);

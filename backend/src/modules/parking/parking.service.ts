@@ -75,9 +75,10 @@ export class ParkingService {
     return { ...page, items: await Promise.all(page.items.map((p) => this.present(p))) };
   }
 
+  /** The vehicle's current parking session, or null when it isn't parked. */
   async active(userId: string, q: ActiveQuery) {
-    const page = await this.list(userId, { ...q, status: 'active', page: 1, pageSize: 100 });
-    return page.items;
+    const page = await this.list(userId, { ...q, status: 'active', page: 1, pageSize: 1 });
+    return page.items[0] ?? null;
   }
 
   async update(userId: string, id: string, d: UpdateParkingDto) {
@@ -97,10 +98,13 @@ export class ParkingService {
     await this.audit.log({ actorUserId: userId, action: 'parking.delete', resourceType: 'parking_session', resourceId: id, metadata: { vehicleId: p.vehicleId } });
   }
 
-  async addMedia(userId: string, id: string, file?: Express.Multer.File, kind = 'photo') {
+  async addMedia(userId: string, id: string, files: Express.Multer.File[] = [], kind = 'photo') {
     const p = await this.load(userId, id, 'record_parking');
-    const up = await this.files.uploadImage(`parking/${p.vehicleId}/${id}`, file);
-    await this.prisma.parkingMedia.create({ data: { parkingSessionId: id, storageKey: up.key, mimeType: up.mime, sizeBytes: up.size, kind } });
+    if (!files.length) throw new BadRequestException('files is required');
+    for (const file of files) {
+      const up = await this.files.uploadImage(`parking/${p.vehicleId}/${id}`, file);
+      await this.prisma.parkingMedia.create({ data: { parkingSessionId: id, storageKey: up.key, mimeType: up.mime, sizeBytes: up.size, kind } });
+    }
     return this.get(userId, id);
   }
 

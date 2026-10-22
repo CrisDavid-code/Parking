@@ -49,6 +49,7 @@ export const api = (app: INestApplication, u?: TestUser) => {
     get: (p: string) => auth(s.get(`/api/v1${p}`)),
     post: (p: string) => auth(s.post(`/api/v1${p}`)),
     patch: (p: string) => auth(s.patch(`/api/v1${p}`)),
+    put: (p: string) => auth(s.put(`/api/v1${p}`)),
     delete: (p: string) => auth(s.delete(`/api/v1${p}`)),
   };
 };

@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { createHmac } from 'crypto';
 import request from 'supertest';
-import { io, Socket } from 'socket.io-client';
+import WebSocket from 'ws';
 import { AddressInfo } from 'net';
 import { api, createApp, prisma, register, resetDb, TestUser } from './helpers';
 
@@ -60,7 +60,7 @@ describe('Subscriptions, devices & tracking (e2e)', () => {
   describe('devices', () => {
     it('creates a device and returns its token exactly once', async () => {
       const res = await api(app, owner).post('/devices').send({ name: 'GPS', type: 'gps_tracker', serial: 'SN1', vehicleId }).expect(201);
-      deviceId = res.body.device.id;
+      deviceId = res.body.id;
       token = res.body.deviceToken;
       expect(token).toMatch(/^vdt_/);
       const fetched = await api(app, owner).get(`/devices/${deviceId}`).expect(200);
@@ -103,8 +103,8 @@ describe('Subscriptions, devices & tracking (e2e)', () => {
       const last = await api(app, owner).get(`/tracking/vehicles/${vehicleId}/last`).expect(200);
       expect(last.body.latitude).toBe(14.6);
       const hist = await api(app, owner).get(`/tracking/vehicles/${vehicleId}/history`).expect(200);
-      expect(hist.body.items).toHaveLength(2);
-      expect(hist.body.historyDays).toBe(90);
+      expect(hist.body).toHaveLength(2);
+      expect(hist.body[0].historyDays).toBe(90);
     });
 
     it('marks stale data as stale, never as live', async () => {
@@ -129,21 +129,21 @@ describe('Subscriptions, devices & tracking (e2e)', () => {
     });
 
     it('pushes live updates over WebSocket only to authorized subscribers', async () => {
-      const url = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/tracking`;
-      const connect = (t: string) => new Promise<Socket>((res) => { const s = io(url, { auth: { token: t }, transports: ['websocket'] }); s.on('connect', () => res(s)); });
-      const ok = await connect(owner.token);
-      const intruder = await connect(other.token);
-      expect(await ok.emitWithAck('subscribe', { vehicleId })).toEqual({ ok: true });
-      expect(await intruder.emitWithAck('subscribe', { vehicleId })).toEqual({ ok: false, error: 'forbidden' });
-      let leaked = false;
-      intruder.on('location', () => (leaked = true));
-      const got = new Promise<{ freshness: string }>((res) => ok.once('location', res));
+      const base = `ws://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/tracking?vehicleId=${vehicleId}`;
+      const open = (t: string) => new Promise<{ ws: WebSocket; closed: Promise<number> }>((res) => {
+        const ws = new WebSocket(`${base}&token=${t}`);
+        const closed = new Promise<number>((c) => ws.on('close', (code) => c(code)));
+        ws.on('open', () => setTimeout(() => res({ ws, closed }), 100));
+      });
+      const ok = await open(owner.token);
+      const intruder = await open(other.token);
+      expect(await intruder.closed).toBe(4401);
+      const got = new Promise<{ event: string; data: { freshness: string } }>((res) => ok.ws.once('message', (m) => res(JSON.parse(String(m)))));
       await ingest(point({ capturedAt: new Date(Date.now() + 5000).toISOString() })).expect(202);
-      expect((await got).freshness).toBe('live');
-      await new Promise((r) => setTimeout(r, 100));
-      expect(leaked).toBe(false);
-      ok.close();
-      intruder.close();
+      const msg = await got;
+      expect(msg.event).toBe('location');
+      expect(msg.data.freshness).toBe('live');
+      ok.ws.close();
     });
 
     it('revoked devices can no longer report', async () => {

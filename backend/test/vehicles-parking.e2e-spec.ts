@@ -55,8 +55,7 @@ describe('Vehicles & parking (e2e)', () => {
     expect(manual.body.source).toBe('manual');
     expect(manual.body.latitude).toBeNull();
     const active = await api(app, a).get(`/parking-sessions/active?vehicleId=${vehicleId}`).expect(200);
-    expect(active.body).toHaveLength(1);
-    expect(active.body[0].id).toBe(manual.body.id);
+    expect(active.body.id).toBe(manual.body.id);
     const old = await api(app, a).get(`/parking-sessions/${gps.body.id}`).expect(200);
     expect(old.body.status).toBe('ended');
   });
@@ -83,6 +82,8 @@ describe('Vehicles & parking (e2e)', () => {
 
   it('lets the owner add a member with limited permissions', async () => {
     await api(app, a).post(`/vehicles/${vehicleId}/members`).send({ email: b.email, permissions: ['view_parking'] }).expect(201);
+    const members = await api(app, a).get(`/vehicles/${vehicleId}/members`).expect(200);
+    expect(members.body.items.map((m: { role: string }) => m.role)).toEqual(['owner', 'member']);
     await api(app, b).get(`/vehicles/${vehicleId}`).expect(200);
     await api(app, b).patch(`/vehicles/${vehicleId}`).send({ alias: 'x' }).expect(403);
     await api(app, b).get(`/tracking/vehicles/${vehicleId}/last`).expect(403);

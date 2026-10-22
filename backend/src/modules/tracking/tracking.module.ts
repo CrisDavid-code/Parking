@@ -137,13 +137,14 @@ export class TrackingService {
     const { historyDays } = await this.subs.limitsFor(v.organizationId ? { organizationId: v.organizationId } : { userId: v.ownerId });
     const minFrom = new Date(Date.now() - historyDays * 86_400_000);
     const from = q.from && q.from > minFrom ? q.from : minFrom;
-    const items = await this.prisma.locationEvent.findMany({
+    const rows = await this.prisma.locationEvent.findMany({
       where: { vehicleId, capturedAt: { gte: from, ...(q.to ? { lte: q.to } : {}) } },
       orderBy: { capturedAt: 'desc' },
       take: q.limit,
-      select: { id: true, latitude: true, longitude: true, accuracyMeters: true, speedMetersPerSecond: true, headingDegrees: true, source: true, capturedAt: true, receivedAt: true, deviceId: true },
+      select: { id: true, vehicleId: true, latitude: true, longitude: true, accuracyMeters: true, speedMetersPerSecond: true, headingDegrees: true, source: true, capturedAt: true, receivedAt: true, deviceId: true },
     });
-    return { vehicleId, from, to: q.to ?? null, historyDays, items };
+    // Points older than the plan window are never returned (see historyDays); freshness is per point.
+    return rows.map((r) => ({ ...r, freshness: freshness(r.capturedAt), historyDays }));
   }
 }
 

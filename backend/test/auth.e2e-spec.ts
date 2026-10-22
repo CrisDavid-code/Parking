@@ -20,10 +20,12 @@ describe('Auth & security (e2e)', () => {
     expect(sub?.planCode).toBe('free');
   });
 
-  it('rejects weak passwords, duplicate emails and unknown fields', async () => {
+  it('rejects weak passwords and duplicate emails; strips privilege fields', async () => {
     await api(app).post('/auth/register').send({ email: 'weak@test.local', password: 'short', fullName: 'W' }).expect(400);
     await api(app).post('/auth/register').send({ email: 'ana@test.local', password: 'Password123', fullName: 'Ana' }).expect(409);
-    await api(app).post('/auth/register').send({ email: 'x@test.local', password: 'Password123', fullName: 'X', role: 'PLATFORM_ADMIN' }).expect(400);
+    const r = await api(app).post('/auth/register').send({ email: 'x@test.local', password: 'Password123', fullName: 'Xavi', role: 'PLATFORM_ADMIN', roles: ['PLATFORM_ADMIN'] }).expect(201);
+    expect(r.body.user.role).toBe('USER');
+    expect(r.body.user.roles).toEqual(['USER']);
   });
 
   it('requires a token on protected routes and rejects forged tokens', async () => {
@@ -97,7 +99,10 @@ describe('Auth & security (e2e)', () => {
     await api(app, u).get('/admin/users').expect(403);
     await prisma.user.update({ where: { id: u.id }, data: { role: 'PLATFORM_ADMIN' } });
     const res = await api(app, u).get('/admin/usage').expect(200);
-    expect(res.body.users).toBeGreaterThan(0);
+    expect(res.body.activeUsers).toBeGreaterThan(0);
+    expect(res.body.series.length).toBe(30);
+    const h = await api(app, u).get('/admin/health').expect(200);
+    expect(h.body.services.find((s: { name: string }) => s.name.startsWith('PostgreSQL')).status).toBe('up');
   });
 
   it('health reports DB/PostGIS and unconfigured integrations honestly', async () => {

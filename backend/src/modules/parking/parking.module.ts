@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Body, Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Query, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { AuthUser, CurrentUser } from '../../common/http';
 import { MAX_UPLOAD_BYTES } from '../files/files.module';
@@ -20,8 +20,8 @@ export class ParkingController {
   @Patch(':id') update(@CurrentUser() u: AuthUser, @Id() id: string, @Body() d: UpdateParkingDto) { return this.svc.update(u.id, id, d); }
   @Post(':id/end') @HttpCode(200) end(@CurrentUser() u: AuthUser, @Id() id: string) { return this.svc.end(u.id, id); }
   @Delete(':id') @HttpCode(204) remove(@CurrentUser() u: AuthUser, @Id() id: string) { return this.svc.remove(u.id, id); }
-  @Post(':id/media') @ApiConsumes('multipart/form-data') @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
-  media(@CurrentUser() u: AuthUser, @Id() id: string, @UploadedFile() f?: Express.Multer.File) { return this.svc.addMedia(u.id, id, f); }
+  @Post(':id/media') @ApiConsumes('multipart/form-data') @UseInterceptors(FilesInterceptor('files', 6, { limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  media(@CurrentUser() u: AuthUser, @Id() id: string, @UploadedFiles() f?: Express.Multer.File[]) { return this.svc.addMedia(u.id, id, f); }
   @Delete(':id/media/:mediaId') @HttpCode(204) removeMedia(@CurrentUser() u: AuthUser, @Id() id: string, @Param('mediaId', ParseUUIDPipe) m: string) { return this.svc.removeMedia(u.id, id, m); }
 }
 

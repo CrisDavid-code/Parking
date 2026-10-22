@@ -1,6 +1,6 @@
 /**
  * Pure multi-level routing over an indoor navigation graph.
- * Coordinates: x = east, y = north, in meters, per level. Levels connect ONLY through explicit
+ * Coordinates: SVG convention per level — x grows right, y grows DOWN (same as the map editor/FloorPlan). Levels connect ONLY through explicit
  * vertical edges (elevator/stairs/ramp) — sharing x/y never implies a connection.
  */
 export type NodeType = 'corridor' | 'elevator' | 'stairs' | 'ramp' | 'entrance' | 'exit' | 'parking_spot' | 'landmark';
@@ -75,7 +75,8 @@ function turnAt(a: GNode, b: GNode, c: GNode): 'left' | 'right' | null {
   if ((!v1[0] && !v1[1]) || (!v2[0] && !v2[1])) return null;
   const angle = (Math.atan2(v1[0] * v2[1] - v1[1] * v2[0], v1[0] * v2[0] + v1[1] * v2[1]) * 180) / Math.PI;
   if (Math.abs(angle) < TURN_DEG) return null;
-  return angle > 0 ? 'left' : 'right';
+  // y-down: positive cross product = clockwise on screen = right turn.
+  return angle > 0 ? 'right' : 'left';
 }
 
 /** Turns a raw path into human instructions (Spanish) and per-level legs. */

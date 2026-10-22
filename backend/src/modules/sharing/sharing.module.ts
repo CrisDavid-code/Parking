@@ -13,7 +13,7 @@ const INVITE_TTL_MS = 7 * 86_400_000;
 
 class CreateShareDto {
   @ApiProperty() @IsUUID() vehicleId: string;
-  @ApiProperty() @Transform(({ value }) => String(value).trim().toLowerCase()) @IsEmail() email: string;
+  @ApiProperty() @Transform(({ value }) => String(value).trim().toLowerCase()) @IsEmail() granteeEmail: string;
   @ApiProperty({ enum: ALL_PERMISSIONS, isArray: true }) @IsArray() @ArrayNotEmpty() @ArrayUnique() @IsIn(ALL_PERMISSIONS, { each: true }) permissions: string[];
   @ApiPropertyOptional() @IsOptional() @Type(() => Date) @IsDate() expiresAt?: Date;
 }
@@ -31,30 +31,31 @@ export class SharingService {
       this.prisma.locationShare.findMany({ where: { ownerId: userId }, include: { vehicle: { select: { alias: true } } }, orderBy: { createdAt: 'desc' } }),
       this.prisma.locationShare.findMany({ where: { granteeUserId: userId }, include: { vehicle: { select: { alias: true } } }, orderBy: { createdAt: 'desc' } }),
     ]);
-    return { items: [...outgoing.map((s) => ({ ...this.status(s), direction: 'outgoing' })), ...incoming.map((s) => ({ ...this.status(s), direction: 'incoming' }))] };
+    const items = [...outgoing.map((s) => ({ ...this.status(s), direction: 'outgoing' })), ...incoming.map((s) => ({ ...this.status(s), direction: 'incoming' }))];
+    return { items, total: items.length, page: 1, pageSize: items.length };
   }
 
   async create(userId: string, d: CreateShareDto) {
     await this.access.assertVehicle(userId, d.vehicleId, 'manage');
     if (d.expiresAt && d.expiresAt <= new Date()) throw new BadRequestException('expiresAt must be in the future');
     const me = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (me.email === d.email) throw new BadRequestException('Cannot share with yourself');
+    if (me.email === d.granteeEmail) throw new BadRequestException('Cannot share with yourself');
     const token = randomToken();
     const share = await this.prisma.locationShare.create({
       data: {
         vehicleId: d.vehicleId,
         ownerId: userId,
-        granteeEmail: d.email,
+        granteeEmail: d.granteeEmail,
         permissions: d.permissions,
         expiresAt: d.expiresAt,
-        invitations: { create: { tokenHash: sha256(token), type: 'vehicle_share', email: d.email, invitedById: userId, expiresAt: new Date(Date.now() + INVITE_TTL_MS) } },
+        invitations: { create: { tokenHash: sha256(token), type: 'vehicle_share', email: d.granteeEmail, invitedById: userId, expiresAt: new Date(Date.now() + INVITE_TTL_MS) } },
       },
     });
     const inviteUrl = `${this.cfg.get('appUrl')}/invite/${token}`;
-    const delivery = await this.notifications.sendEmail(d.email, 'Te compartieron un vehículo', `Acepta la invitación: ${inviteUrl}`);
+    const delivery = await this.notifications.sendEmail(d.granteeEmail, 'Te compartieron un vehículo', `Acepta la invitación: ${inviteUrl}`);
     await this.audit.log({ actorUserId: userId, action: 'share.create', resourceType: 'location_share', resourceId: share.id, metadata: { vehicleId: d.vehicleId, permissions: d.permissions } });
     // The link is returned to the owner so it can be delivered manually while email isn't configured.
-    return { share, inviteUrl, emailDelivered: delivery.delivered };
+    return { ...share, inviteUrl, emailDelivered: delivery.delivered };
   }
 
   async revoke(userId: string, id: string) {
@@ -67,24 +68,26 @@ export class SharingService {
   private async invitation(token: string) {
     const inv = await this.prisma.invitation.findUnique({
       where: { tokenHash: sha256(token) },
-      include: { share: { include: { vehicle: { select: { alias: true, make: true, model: true } } } }, organization: { select: { id: true, name: true } } },
+      include: { share: { include: { vehicle: { select: { id: true, alias: true, make: true, model: true } } } }, organization: { select: { id: true, name: true } } },
     });
     if (!inv) throw new NotFoundException('Invitation not found');
     return inv;
   }
 
+  /** Public preview: shows who invites and to what, never the invitee's or vehicle's private data. */
   async preview(token: string) {
     const inv = await this.invitation(token);
     const inviter = await this.prisma.user.findUnique({ where: { id: inv.invitedById }, select: { fullName: true } });
+    const expired = inv.expiresAt < new Date();
+    const revoked = inv.share?.status === 'revoked';
     return {
+      token,
       type: inv.type,
-      email: inv.email,
-      invitedBy: inviter?.fullName ?? null,
-      expiresAt: inv.expiresAt,
-      expired: inv.expiresAt < new Date(),
-      accepted: Boolean(inv.acceptedAt),
+      ownerName: inviter?.fullName ?? '',
+      status: inv.acceptedAt ? 'accepted' : revoked ? 'revoked' : expired ? 'expired' : 'pending',
+      expiresAt: inv.share?.expiresAt ?? inv.expiresAt,
       vehicle: inv.share?.vehicle ?? null,
-      permissions: inv.share?.permissions ?? null,
+      permissions: inv.share?.permissions ?? [],
       organization: inv.organization ?? null,
       orgRole: inv.orgRole,
     };

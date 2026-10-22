@@ -1,5 +1,5 @@
 import { Controller, Get, Module } from '@nestjs/common';
-import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDate, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
@@ -13,7 +13,7 @@ export const LOW_CONFIDENCE = 0.5;
 
 /** Estimate produced by a native sensor layer (or manual input). Never generated server-side. */
 export class SensorEstimateDto {
-  @ApiProperty({ enum: SENSOR_SOURCES }) @IsIn(SENSOR_SOURCES) source: SensorSource;
+  @ApiPropertyOptional({ enum: SENSOR_SOURCES, description: 'Defaults to landmark when nodeId is given, else manual_level' }) @IsOptional() @IsIn(SENSOR_SOURCES) source?: SensorSource;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(1_000_000) steps?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100_000) estimatedDistanceMeters?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(360) headingDegrees?: number;
@@ -22,9 +22,9 @@ export class SensorEstimateDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() levelId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() nodeId?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(300) @Max(1100) pressureHpa?: number;
-  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0) @Max(1) confidence: number;
+  @ApiPropertyOptional({ minimum: 0, maximum: 1, description: 'Defaults to 1 for manual input (the user states where they are)' }) @IsOptional() @IsNumber() @Min(0) @Max(1) confidence?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(10_000) uncertaintyMeters?: number;
-  @ApiProperty() @Type(() => Date) @IsDate() capturedAt: Date;
+  @ApiPropertyOptional({ description: 'Defaults to server time' }) @IsOptional() @Type(() => Date) @IsDate() capturedAt?: Date;
 }
 
 export interface EstimateAssessment { acceptPosition: boolean; acceptLevel: boolean; requiresConfirmation: boolean }
@@ -36,7 +36,7 @@ export interface EstimateAssessment { acceptPosition: boolean; acceptLevel: bool
  * - a floor change requires high confidence (no automatic level switch on weak data);
  * - weak estimates (below LOW_CONFIDENCE) drop confirmation so the client asks the user.
  */
-export function assessEstimate(e: Pick<SensorEstimateDto, 'source' | 'confidence' | 'nodeId' | 'levelId'>): EstimateAssessment {
+export function assessEstimate(e: { source: SensorSource; confidence: number; nodeId?: string; levelId?: string }): EstimateAssessment {
   if (e.source === 'manual_level') return { acceptPosition: false, acceptLevel: Boolean(e.levelId), requiresConfirmation: true };
   const strong = e.confidence >= CONFIRM_CONFIDENCE;
   return {

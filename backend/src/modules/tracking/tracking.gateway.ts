@@ -1,47 +1,54 @@
-import { Logger } from '@nestjs/common';
-import { ConnectedSocket, MessageBody, OnGatewayConnection, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-import type { Server, Socket } from 'socket.io';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
+import { OnGatewayConnection, OnGatewayDisconnect, WebSocketGateway } from '@nestjs/websockets';
+import type { IncomingMessage } from 'http';
+import type { WebSocket } from 'ws';
 import { AccessService } from '../../common/access.service';
 import { AuthGuard } from '../../common/auth.guard';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Socket.IO namespace /tracking. Clients connect with `auth: { token: <accessToken> }`
- * and emit `subscribe` { vehicleId }. Access is checked per subscription.
+ * Native WebSocket endpoint `/tracking?vehicleId=<uuid>&token=<accessToken>`.
+ * The socket is authenticated and authorized (view_location) on connect; it then receives
+ * `{ "event": "location", "data": LastLocation }` messages for that vehicle only.
  */
-@WebSocketGateway({ namespace: '/tracking', cors: { origin: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:8080').split(','), credentials: true } })
-export class TrackingGateway implements OnGatewayConnection {
+@WebSocketGateway({ path: '/tracking' })
+export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   private log = new Logger(TrackingGateway.name);
-  @WebSocketServer() server: Server;
+  // ponytail: in-memory fan-out, single instance only; use Redis pub/sub when running >1 replica.
+  private rooms = new Map<string, Set<WebSocket>>();
   constructor(private auth: AuthGuard, private access: AccessService) {}
 
-  async handleConnection(client: Socket) {
+  async handleConnection(client: WebSocket, req: IncomingMessage) {
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const vehicleId = url.searchParams.get('vehicleId') ?? '';
+    const token = url.searchParams.get('token') ?? '';
     try {
-      const token = (client.handshake.auth as { token?: string })?.token;
-      client.data.user = await this.auth.verify(token ? `Bearer ${token}` : undefined);
+      if (!UUID.test(vehicleId)) throw new Error('bad vehicleId');
+      const user = await this.auth.verify(`Bearer ${token}`);
+      const perms = await this.access.vehiclePermissions(user.id, vehicleId);
+      if (!perms.has('view_location')) throw new Error('forbidden');
     } catch {
-      client.emit('error', { message: 'unauthorized' });
-      client.disconnect(true);
+      client.close(4401, 'unauthorized');
+      return;
     }
+    (this.rooms.get(vehicleId) ?? this.rooms.set(vehicleId, new Set()).get(vehicleId)!).add(client);
+    (client as WebSocket & { vehicleId?: string }).vehicleId = vehicleId;
   }
 
-  @SubscribeMessage('subscribe')
-  async subscribe(@ConnectedSocket() client: Socket, @MessageBody() body: { vehicleId?: string }) {
-    const userId = client.data.user?.id as string | undefined;
-    const vehicleId = body?.vehicleId;
-    if (!userId || !vehicleId || !/^[0-9a-f-]{36}$/i.test(vehicleId)) return { ok: false, error: 'bad_request' };
-    const perms = await this.access.vehiclePermissions(userId, vehicleId);
-    if (!perms.has('view_location')) return { ok: false, error: 'forbidden' };
-    await client.join(`vehicle:${vehicleId}`);
-    return { ok: true };
-  }
-
-  @SubscribeMessage('unsubscribe')
-  async unsubscribe(@ConnectedSocket() client: Socket, @MessageBody() body: { vehicleId?: string }) {
-    if (body?.vehicleId) await client.leave(`vehicle:${body.vehicleId}`);
-    return { ok: true };
+  handleDisconnect(client: WebSocket & { vehicleId?: string }) {
+    if (!client.vehicleId) return;
+    const room = this.rooms.get(client.vehicleId);
+    room?.delete(client);
+    if (room && !room.size) this.rooms.delete(client.vehicleId);
   }
 
   emitLocation(vehicleId: string, payload: unknown) {
-    this.server?.to(`vehicle:${vehicleId}`).emit('location', payload);
+    const msg = JSON.stringify({ event: 'location', data: payload });
+    this.rooms.get(vehicleId)?.forEach((c) => c.readyState === 1 && c.send(msg));
+  }
+
+  onModuleDestroy() {
+    this.rooms.forEach((r) => r.forEach((c) => c.close()));
   }
 }

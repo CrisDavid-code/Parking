@@ -1,7 +1,7 @@
 import { createParamDecorator, ExecutionContext, SetMetadata } from '@nestjs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import type { Request } from 'express';
 import { createHash, randomBytes } from 'crypto';
 
@@ -22,7 +22,8 @@ export const CurrentUser = createParamDecorator((_: unknown, ctx: ExecutionConte
 
 export class PageQuery {
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
-  @ApiPropertyOptional({ default: 20 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 20;
+  @ApiPropertyOptional({ default: 20 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) pageSize = 20;
+  @ApiPropertyOptional({ description: 'Free-text search' }) @IsOptional() @IsString() @MaxLength(100) q?: string;
 }
 
 export interface Page<T> {

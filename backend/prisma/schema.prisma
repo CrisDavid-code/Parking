@@ -101,6 +101,7 @@ model User {
   subscriptions  Subscription[]
   devices        TrackingDevice[]
   navSessions    PedestrianNavigationSession[]
+  supportTickets SupportTicket[]
 
   @@map("users")
 }
@@ -157,6 +158,8 @@ model Vehicle {
   color             String?
   plate             String?
   photoKey          String?   @map("photo_key")
+  /// External https photo URL (used when no uploaded photo exists)
+  photoUrl          String?   @map("photo_url")
   isPrimary         Boolean   @default(false) @map("is_primary")
   maintenanceStatus String?   @map("maintenance_status")
   deletedAt         DateTime? @map("deleted_at")
@@ -484,6 +487,7 @@ model Driver {
   organizationId String              @map("organization_id") @db.Uuid
   userId         String?             @map("user_id") @db.Uuid
   fullName       String              @map("full_name")
+  email          String?
   licenseNumber  String?             @map("license_number")
   phone          String?
   active         Boolean             @default(true)
@@ -759,4 +763,35 @@ model AuditEvent {
   @@index([organizationId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("audit_events")
+}
+
+enum SupportStatus {
+  open
+  pending
+  closed
+}
+
+model SupportTicket {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  subject   String
+  message   String
+  status    SupportStatus @default(open)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@map("support_tickets")
+}
+
+/// Fleet alerts are derived (geofence events, offline devices); acknowledgements are stored by alert id.
+model AlertAcknowledgement {
+  organizationId String   @map("organization_id") @db.Uuid
+  alertId        String   @map("alert_id")
+  userId         String   @map("user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@id([organizationId, alertId])
+  @@map("alert_acknowledgements")
 }

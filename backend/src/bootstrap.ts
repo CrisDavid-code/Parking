@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { WsAdapter } from '@nestjs/platform-ws';
 import helmet from 'helmet';
 import { PrismaExceptionFilter } from './common/prisma-exception.filter';
 import { config } from './config';
@@ -9,9 +10,10 @@ export function configureApp(app: INestApplication) {
   const c = config();
   app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/live'] });
   app.use(helmet());
-  app.enableCors({ origin: c.corsOrigins, credentials: true, methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  app.enableCors({ origin: c.corsOrigins, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new PrismaExceptionFilter());
+  app.useWebSocketAdapter(new WsAdapter(app));
   app.enableShutdownHooks();
   return app;
 }
