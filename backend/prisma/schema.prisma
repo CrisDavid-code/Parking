@@ -1,0 +1,762 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlatformRole {
+  USER
+  PLATFORM_ADMIN
+}
+
+enum AccountType {
+  personal
+  business
+}
+
+enum OrgRole {
+  ORG_ADMIN
+  ORG_MEMBER
+  DRIVER
+}
+
+enum ParkingStatus {
+  active
+  ended
+}
+
+enum DeviceStatus {
+  pending
+  active
+  revoked
+}
+
+enum ShareStatus {
+  pending
+  active
+  revoked
+  expired
+}
+
+enum SubscriptionStatus {
+  active
+  pending_payment
+  past_due
+  canceled
+}
+
+enum MapVersionStatus {
+  draft
+  published
+  archived
+}
+
+enum NodeType {
+  corridor
+  elevator
+  stairs
+  ramp
+  entrance
+  exit
+  parking_spot
+  landmark
+}
+
+enum EdgeType {
+  walk
+  elevator
+  stairs
+  ramp
+}
+
+enum NavigationMode {
+  basic
+  indoor
+  sensor
+}
+
+model User {
+  id               String       @id @default(uuid()) @db.Uuid
+  email            String       @unique
+  passwordHash     String       @map("password_hash")
+  fullName         String       @map("full_name")
+  role             PlatformRole @default(USER)
+  accountType      AccountType  @default(personal) @map("account_type")
+  failedLoginCount Int          @default(0) @map("failed_login_count")
+  lockedUntil      DateTime?    @map("locked_until")
+  deletedAt        DateTime?    @map("deleted_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  profile        UserProfile?
+  sessions       AuthSession[]
+  resetTokens    PasswordResetToken[]
+  vehicles       Vehicle[]                     @relation("VehicleOwner")
+  vehicleMembers VehicleMember[]
+  notifications  Notification[]
+  orgMembers     OrganizationMember[]
+  subscriptions  Subscription[]
+  devices        TrackingDevice[]
+  navSessions    PedestrianNavigationSession[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  userId         String   @id @map("user_id") @db.Uuid
+  locale         String   @default("es")
+  timezone       String   @default("America/Guatemala")
+  currency       String   @default("GTQ")
+  phone          String?
+  locationPrefs  Json     @default("{}") @map("location_prefs")
+  onboardingDone Boolean  @default(false) @map("onboarding_done")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  userAgent        String?   @map("user_agent")
+  ip               String?
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model Vehicle {
+  id                String    @id @default(uuid()) @db.Uuid
+  ownerId           String    @map("owner_id") @db.Uuid
+  organizationId    String?   @map("organization_id") @db.Uuid
+  alias             String
+  make              String
+  model             String
+  year              Int?
+  color             String?
+  plate             String?
+  photoKey          String?   @map("photo_key")
+  isPrimary         Boolean   @default(false) @map("is_primary")
+  maintenanceStatus String?   @map("maintenance_status")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  owner          User                 @relation("VehicleOwner", fields: [ownerId], references: [id])
+  organization   Organization?        @relation(fields: [organizationId], references: [id])
+  members        VehicleMember[]
+  parking        ParkingSession[]
+  locationEvents LocationEvent[]
+  lastLocation   VehicleLastLocation?
+  devices        TrackingDevice[]
+  shares         LocationShare[]
+  assignments    VehicleAssignment[]
+  geofenceEvents GeofenceEvent[]
+
+  @@index([ownerId])
+  @@index([organizationId])
+  @@map("vehicles")
+}
+
+model VehicleMember {
+  vehicleId   String   @map("vehicle_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  permissions String[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([vehicleId, userId])
+  @@map("vehicle_members")
+}
+
+model ParkingSession {
+  id             String        @id @default(uuid()) @db.Uuid
+  vehicleId      String        @map("vehicle_id") @db.Uuid
+  createdById    String        @map("created_by_id") @db.Uuid
+  status         ParkingStatus @default(active)
+  latitude       Float?
+  longitude      Float?
+  accuracyMeters Float?        @map("accuracy_meters")
+  address        String?
+  buildingId     String?       @map("building_id") @db.Uuid
+  levelId        String?       @map("level_id") @db.Uuid
+  levelLabel     String?       @map("level_label")
+  zone           String?
+  row            String?
+  spot           String?
+  parkingPlaceId String?       @map("parking_place_id") @db.Uuid
+  entrance       String?
+  referencePoint String?       @map("reference_point")
+  referenceType  String?       @map("reference_type")
+  ticketNumber   String?       @map("ticket_number")
+  notes          String?
+  source         String        @default("manual")
+  startedAt      DateTime      @default(now()) @map("started_at")
+  endedAt        DateTime?     @map("ended_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  vehicle      Vehicle                               @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  building     Building?                             @relation(fields: [buildingId], references: [id])
+  level        BuildingLevel?                        @relation(fields: [levelId], references: [id])
+  parkingPlace ParkingPlace?                         @relation(fields: [parkingPlaceId], references: [id])
+  media        ParkingMedia[]
+  navSessions  PedestrianNavigationSession[]
+  /// PostGIS generated column (see migration *_postgis); read-only
+  geog         Unsupported("geography(Point,4326)")? @default(dbgenerated("(st_setsrid(st_makepoint(longitude, latitude), 4326))::geography"))
+
+  @@index([vehicleId, status])
+  @@index([geog], map: "parking_sessions_geog_idx", type: Gist)
+  @@map("parking_sessions")
+}
+
+model ParkingMedia {
+  id               String         @id @default(uuid()) @db.Uuid
+  parkingSessionId String         @map("parking_session_id") @db.Uuid
+  storageKey       String         @map("storage_key")
+  kind             String         @default("photo")
+  mimeType         String         @map("mime_type")
+  sizeBytes        Int            @map("size_bytes")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  parkingSession   ParkingSession @relation(fields: [parkingSessionId], references: [id], onDelete: Cascade)
+
+  @@map("parking_media")
+}
+
+model LocationEvent {
+  id                   String   @id @default(uuid()) @db.Uuid
+  vehicleId            String   @map("vehicle_id") @db.Uuid
+  deviceId             String   @map("device_id") @db.Uuid
+  latitude             Float
+  longitude            Float
+  accuracyMeters       Float?   @map("accuracy_meters")
+  speedMetersPerSecond Float?   @map("speed_mps")
+  headingDegrees       Float?   @map("heading_degrees")
+  source               String   @default("gps")
+  capturedAt           DateTime @map("captured_at")
+  receivedAt           DateTime @default(now()) @map("received_at")
+
+  vehicle Vehicle                               @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  device  TrackingDevice                        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  /// PostGIS generated column (see migration *_postgis); read-only
+  geog    Unsupported("geography(Point,4326)")? @default(dbgenerated("(st_setsrid(st_makepoint(longitude, latitude), 4326))::geography"))
+
+  @@unique([deviceId, capturedAt])
+  @@index([vehicleId, capturedAt])
+  @@index([geog], map: "location_events_geog_idx", type: Gist)
+  @@map("location_events")
+}
+
+model VehicleLastLocation {
+  vehicleId            String   @id @map("vehicle_id") @db.Uuid
+  deviceId             String   @map("device_id") @db.Uuid
+  latitude             Float
+  longitude            Float
+  accuracyMeters       Float?   @map("accuracy_meters")
+  speedMetersPerSecond Float?   @map("speed_mps")
+  headingDegrees       Float?   @map("heading_degrees")
+  source               String
+  capturedAt           DateTime @map("captured_at")
+  receivedAt           DateTime @map("received_at")
+  vehicle              Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("vehicle_last_locations")
+}
+
+model TrackingDevice {
+  id             String       @id @default(uuid()) @db.Uuid
+  ownerId        String       @map("owner_id") @db.Uuid
+  organizationId String?      @map("organization_id") @db.Uuid
+  vehicleId      String?      @map("vehicle_id") @db.Uuid
+  name           String
+  type           String
+  serial         String
+  status         DeviceStatus @default(pending)
+  lastSeenAt     DateTime?    @map("last_seen_at")
+  batteryPercent Int?         @map("battery_percent")
+  signal         Int?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  owner        User               @relation(fields: [ownerId], references: [id])
+  organization Organization?      @relation(fields: [organizationId], references: [id])
+  vehicle      Vehicle?           @relation(fields: [vehicleId], references: [id])
+  credentials  DeviceCredential[]
+  events       LocationEvent[]
+
+  @@unique([ownerId, serial])
+  @@map("tracking_devices")
+}
+
+model DeviceCredential {
+  id          String         @id @default(uuid()) @db.Uuid
+  deviceId    String         @map("device_id") @db.Uuid
+  tokenPrefix String         @unique @map("token_prefix")
+  tokenHash   String         @map("token_hash")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  revokedAt   DateTime?      @map("revoked_at")
+  device      TrackingDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("device_credentials")
+}
+
+/// Non-secret provider settings; secrets live in env/secret manager, referenced by `secretRef`.
+model DeviceProviderConfig {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  provider       String
+  settings       Json     @default("{}")
+  secretRef      String?  @map("secret_ref")
+  enabled        Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("device_provider_configs")
+}
+
+model LocationShare {
+  id            String       @id @default(uuid()) @db.Uuid
+  vehicleId     String       @map("vehicle_id") @db.Uuid
+  ownerId       String       @map("owner_id") @db.Uuid
+  granteeEmail  String       @map("grantee_email")
+  granteeUserId String?      @map("grantee_user_id") @db.Uuid
+  permissions   String[]
+  status        ShareStatus  @default(pending)
+  expiresAt     DateTime?    @map("expires_at")
+  revokedAt     DateTime?    @map("revoked_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  vehicle       Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  invitations   Invitation[]
+
+  @@index([granteeUserId, status])
+  @@map("location_shares")
+}
+
+model Invitation {
+  id             String         @id @default(uuid()) @db.Uuid
+  tokenHash      String         @unique @map("token_hash")
+  type           String
+  email          String
+  shareId        String?        @map("share_id") @db.Uuid
+  organizationId String?        @map("organization_id") @db.Uuid
+  orgRole        OrgRole?       @map("org_role")
+  invitedById    String         @map("invited_by_id") @db.Uuid
+  expiresAt      DateTime       @map("expires_at")
+  acceptedAt     DateTime?      @map("accepted_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  share          LocationShare? @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("invitations")
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String
+  title     String
+  body      String
+  data      Json      @default("{}")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model Plan {
+  code          String         @id
+  name          String
+  priceMonthly  Decimal        @map("price_monthly") @db.Decimal(10, 2)
+  currency      String         @default("GTQ")
+  limits        Json
+  active        Boolean        @default(true)
+  sortOrder     Int            @default(0) @map("sort_order")
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String?            @map("user_id") @db.Uuid
+  organizationId    String?            @unique @map("organization_id") @db.Uuid
+  planCode          String             @map("plan_code")
+  pendingPlanCode   String?            @map("pending_plan_code")
+  status            SubscriptionStatus @default(active)
+  provider          String?
+  providerRef       String?            @map("provider_ref")
+  currentPeriodEnd  DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  plan              Plan               @relation(fields: [planCode], references: [code])
+  user              User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization      Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billingEvents     BillingEvent[]
+
+  @@unique([userId])
+  @@map("subscriptions")
+}
+
+model BillingEvent {
+  id             String        @id @default(uuid()) @db.Uuid
+  provider       String
+  eventId        String        @map("event_id")
+  type           String
+  payload        Json
+  subscriptionId String?       @map("subscription_id") @db.Uuid
+  processedAt    DateTime      @default(now()) @map("processed_at")
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@unique([provider, eventId])
+  @@map("billing_events")
+}
+
+model UsageRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  metric         String
+  quantity       Int      @default(1)
+  recordedAt     DateTime @default(now()) @map("recorded_at")
+
+  @@index([metric, recordedAt])
+  @@map("usage_records")
+}
+
+model Organization {
+  id           String               @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String               @unique
+  settings     Json                 @default("{}")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  members      OrganizationMember[]
+  vehicles     Vehicle[]
+  devices      TrackingDevice[]
+  drivers      Driver[]
+  assignments  VehicleAssignment[]
+  geofences    Geofence[]
+  invitations  Invitation[]
+  subscription Subscription?
+  buildings    Building[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  role           OrgRole
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@map("organization_members")
+}
+
+model Driver {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  userId         String?             @map("user_id") @db.Uuid
+  fullName       String              @map("full_name")
+  licenseNumber  String?             @map("license_number")
+  phone          String?
+  active         Boolean             @default(true)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments    VehicleAssignment[]
+
+  @@index([organizationId])
+  @@map("drivers")
+}
+
+model VehicleAssignment {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  vehicleId      String       @map("vehicle_id") @db.Uuid
+  driverId       String       @map("driver_id") @db.Uuid
+  startsAt       DateTime     @default(now()) @map("starts_at")
+  endsAt         DateTime?    @map("ends_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vehicle        Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver         Driver       @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("vehicle_assignments")
+}
+
+model Geofence {
+  id             String                                @id @default(uuid()) @db.Uuid
+  organizationId String                                @map("organization_id") @db.Uuid
+  name           String
+  centerLat      Float                                 @map("center_lat")
+  centerLng      Float                                 @map("center_lng")
+  radiusMeters   Float                                 @map("radius_meters")
+  active         Boolean                               @default(true)
+  createdAt      DateTime                              @default(now()) @map("created_at")
+  organization   Organization                          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  events         GeofenceEvent[]
+  /// PostGIS generated column (see migration *_postgis); read-only
+  geog           Unsupported("geography(Point,4326)")? @default(dbgenerated("(st_setsrid(st_makepoint(center_lng, center_lat), 4326))::geography"))
+
+  @@index([organizationId])
+  @@index([geog], map: "geofences_geog_idx", type: Gist)
+  @@map("geofences")
+}
+
+model GeofenceEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  geofenceId String   @map("geofence_id") @db.Uuid
+  vehicleId  String   @map("vehicle_id") @db.Uuid
+  type       String
+  latitude   Float
+  longitude  Float
+  occurredAt DateTime @map("occurred_at")
+  geofence   Geofence @relation(fields: [geofenceId], references: [id], onDelete: Cascade)
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([geofenceId, vehicleId, occurredAt])
+  @@map("geofence_events")
+}
+
+model Building {
+  id               String                                @id @default(uuid()) @db.Uuid
+  organizationId   String?                               @map("organization_id") @db.Uuid
+  name             String
+  address          String?
+  latitude         Float?
+  longitude        Float?
+  isPublic         Boolean                               @default(true) @map("is_public")
+  publishedVersion Int?                                  @map("published_version")
+  createdAt        DateTime                              @default(now()) @map("created_at")
+  updatedAt        DateTime                              @updatedAt @map("updated_at")
+  organization     Organization?                         @relation(fields: [organizationId], references: [id])
+  levels           BuildingLevel[]
+  versions         IndoorMapVersion[]
+  entryPoints      ParkingEntryPoint[]
+  parkingSessions  ParkingSession[]
+  /// PostGIS generated column (see migration *_postgis); read-only
+  geog             Unsupported("geography(Point,4326)")? @default(dbgenerated("(st_setsrid(st_makepoint(longitude, latitude), 4326))::geography"))
+
+  @@index([geog], map: "buildings_geog_idx", type: Gist)
+  @@map("buildings")
+}
+
+model BuildingLevel {
+  id              String              @id @default(uuid()) @db.Uuid
+  buildingId      String              @map("building_id") @db.Uuid
+  code            String
+  name            String
+  ordinal         Int
+  building        Building            @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  zones           IndoorZone[]
+  nodes           NavigationNode[]
+  places          ParkingPlace[]
+  landmarks       IndoorLandmark[]
+  entryPoints     ParkingEntryPoint[]
+  parkingSessions ParkingSession[]
+
+  @@unique([buildingId, code])
+  @@map("building_levels")
+}
+
+model IndoorMapVersion {
+  id          String           @id @default(uuid()) @db.Uuid
+  buildingId  String           @map("building_id") @db.Uuid
+  version     Int
+  status      MapVersionStatus @default(draft)
+  notes       String?
+  createdById String?          @map("created_by_id") @db.Uuid
+  publishedAt DateTime?        @map("published_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  building    Building         @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  nodes       NavigationNode[]
+  edges       NavigationEdge[]
+  zones       IndoorZone[]
+
+  @@unique([buildingId, version])
+  @@map("indoor_map_versions")
+}
+
+model IndoorZone {
+  id           String           @id @default(uuid()) @db.Uuid
+  mapVersionId String           @map("map_version_id") @db.Uuid
+  levelId      String           @map("level_id") @db.Uuid
+  name         String
+  kind         String           @default("general")
+  restricted   Boolean          @default(false)
+  polygon      Json?
+  mapVersion   IndoorMapVersion @relation(fields: [mapVersionId], references: [id], onDelete: Cascade)
+  level        BuildingLevel    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  nodes        NavigationNode[]
+
+  @@map("indoor_zones")
+}
+
+model NavigationNode {
+  id           String              @id @default(uuid()) @db.Uuid
+  mapVersionId String              @map("map_version_id") @db.Uuid
+  levelId      String              @map("level_id") @db.Uuid
+  zoneId       String?             @map("zone_id") @db.Uuid
+  key          String
+  x            Float
+  y            Float
+  type         NodeType
+  label        String?
+  mapVersion   IndoorMapVersion    @relation(fields: [mapVersionId], references: [id], onDelete: Cascade)
+  level        BuildingLevel       @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  zone         IndoorZone?         @relation(fields: [zoneId], references: [id])
+  edgesFrom    NavigationEdge[]    @relation("EdgeFrom")
+  edgesTo      NavigationEdge[]    @relation("EdgeTo")
+  places       ParkingPlace[]
+  landmarks    IndoorLandmark[]
+  entryPoints  ParkingEntryPoint[]
+
+  @@unique([mapVersionId, key])
+  @@map("navigation_nodes")
+}
+
+model NavigationEdge {
+  id             String           @id @default(uuid()) @db.Uuid
+  mapVersionId   String           @map("map_version_id") @db.Uuid
+  fromNodeId     String           @map("from_node_id") @db.Uuid
+  toNodeId       String           @map("to_node_id") @db.Uuid
+  distanceMeters Float            @map("distance_meters")
+  type           EdgeType         @default(walk)
+  accessible     Boolean          @default(true)
+  bidirectional  Boolean          @default(true)
+  status         String           @default("open")
+  mapVersion     IndoorMapVersion @relation(fields: [mapVersionId], references: [id], onDelete: Cascade)
+  from           NavigationNode   @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  to             NavigationNode   @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@index([mapVersionId])
+  @@map("navigation_edges")
+}
+
+model ParkingPlace {
+  id              String           @id @default(uuid()) @db.Uuid
+  levelId         String           @map("level_id") @db.Uuid
+  nodeId          String?          @map("node_id") @db.Uuid
+  code            String
+  row             String?
+  zone            String?
+  level           BuildingLevel    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  node            NavigationNode?  @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  parkingSessions ParkingSession[]
+
+  @@unique([levelId, code])
+  @@map("parking_places")
+}
+
+model IndoorLandmark {
+  id          String          @id @default(uuid()) @db.Uuid
+  levelId     String          @map("level_id") @db.Uuid
+  nodeId      String?         @map("node_id") @db.Uuid
+  name        String
+  description String?
+  photoKey    String?         @map("photo_key")
+  level       BuildingLevel   @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  node        NavigationNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+
+  @@map("indoor_landmarks")
+}
+
+model ParkingEntryPoint {
+  id         String          @id @default(uuid()) @db.Uuid
+  buildingId String          @map("building_id") @db.Uuid
+  levelId    String          @map("level_id") @db.Uuid
+  nodeId     String?         @map("node_id") @db.Uuid
+  name       String
+  latitude   Float?
+  longitude  Float?
+  building   Building        @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  level      BuildingLevel   @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  node       NavigationNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+
+  @@map("parking_entry_points")
+}
+
+model PedestrianNavigationSession {
+  id                String                       @id @default(uuid()) @db.Uuid
+  userId            String                       @map("user_id") @db.Uuid
+  parkingSessionId  String                       @map("parking_session_id") @db.Uuid
+  mode              NavigationMode
+  status            String                       @default("active")
+  mapVersionId      String?                      @map("map_version_id") @db.Uuid
+  targetNodeId      String?                      @map("target_node_id") @db.Uuid
+  currentNodeId     String?                      @map("current_node_id") @db.Uuid
+  currentLevelId    String?                      @map("current_level_id") @db.Uuid
+  positionConfirmed Boolean                      @default(false) @map("position_confirmed")
+  startedAt         DateTime                     @default(now()) @map("started_at")
+  endedAt           DateTime?                    @map("ended_at")
+  user              User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parkingSession    ParkingSession               @relation(fields: [parkingSessionId], references: [id], onDelete: Cascade)
+  estimates         PedestrianPositionEstimate[]
+
+  @@map("pedestrian_navigation_sessions")
+}
+
+model PedestrianPositionEstimate {
+  id                      String                      @id @default(uuid()) @db.Uuid
+  sessionId               String                      @map("session_id") @db.Uuid
+  source                  String
+  levelId                 String?                     @map("level_id") @db.Uuid
+  nodeId                  String?                     @map("node_id") @db.Uuid
+  steps                   Int?
+  estimatedDistanceMeters Float?                      @map("estimated_distance_meters")
+  headingDegrees          Float?                      @map("heading_degrees")
+  turnEstimate            String?                     @map("turn_estimate")
+  floorEstimate           String?                     @map("floor_estimate")
+  pressureHpa             Float?                      @map("pressure_hpa")
+  confidence              Float
+  uncertaintyMeters       Float?                      @map("uncertainty_meters")
+  capturedAt              DateTime                    @map("captured_at")
+  createdAt               DateTime                    @default(now()) @map("created_at")
+  session                 PedestrianNavigationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, capturedAt])
+  @@map("pedestrian_position_estimates")
+}
+
+model AuditEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  action         String
+  resourceType   String   @map("resource_type")
+  resourceId     String?  @map("resource_id")
+  metadata       Json     @default("{}")
+  ip             String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_events")
+}
